@@ -1,0 +1,108 @@
+version: '3.8'
+
+# AWS ECS Optimized Docker Compose Configuration
+# This file is designed to work with Docker Compose CLI ECS integration
+
+services:
+  orchestrator:
+    image: ${IMAGE_URI}
+    container_name: contact-center-orchestrator
+    
+    ports:
+      - "8000:8000"
+    
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=false
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - OPENAI_MODEL=gpt-4o-mini
+      - OPENAI_TIMEOUT=30.0
+      - MIN_CONFIDENCE_THRESHOLD=0.5
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=60
+      - MAX_CONCURRENT_REQUESTS=100
+    
+    # Secrets managed by AWS Secrets Manager
+    secrets:
+      - openai_api_key
+    
+    # AWS ECS specific labels
+    x-aws-cloudformation:
+      Resources:
+        OrchestratorTaskDefinition:
+          Properties:
+            # CPU and Memory allocation (256 CPU = 0.25 vCPU)
+            Cpu: '512'
+            Memory: '1024'
+            
+            # Container insights for monitoring
+            ContainerInsights: enabled
+    
+    # Load balancer configuration
+    x-aws-load-balancer:
+      enabled: true
+      type: application
+      health-check:
+        path: /api/v1/health
+        interval: 30s
+        timeout: 10s
+        healthy-threshold: 2
+        unhealthy-threshold: 3
+      port: 8000
+      protocol: HTTP
+      # SSL/TLS configuration (optional - uncomment and configure for HTTPS)
+      # certificate-arn: ${ACM_CERTIFICATE_ARN}
+      # ssl-policy: ELBSecurityPolicy-TLS-1-2-2017-01
+    
+    # Auto-scaling configuration
+    x-aws-autoscaling:
+      min: 2
+      max: 10
+      cpu: 70
+      memory: 80
+    
+    # CloudWatch Logs configuration
+    x-aws-logs:
+      group: /ecs/contact-center-orchestrator
+      region: ${AWS_REGION}
+      stream-prefix: orchestrator
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Deployment strategy
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+# Secrets configuration
+secrets:
+  openai_api_key:
+    x-aws-secret-manager:
+      # Reference to AWS Secrets Manager secret
+      arn: ${OPENAI_API_KEY_SECRET_ARN}
+      # Or use the secret name
+      # name: ${ENVIRONMENT}/orchestrator/openai_api_key
+      region: ${AWS_REGION}
+
+# Network configuration
+networks:
+  default:
+    x-aws-vpc: ${VPC_ID}
+    x-aws-cluster: ${ECS_CLUSTER_NAME}
+
+# Note: Prometheus and Grafana services are excluded from ECS deployment
+# For production monitoring, use AWS CloudWatch and/or managed Prometheus/Grafana services
