@@ -37,28 +37,28 @@ install-dev:
 
 # Run development server
 run:
-	uv run uvicorn orchestrator.main:app --reload --host 0.0.0.0 --port 8000
+	uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Testing
 test:
 	uv run pytest tests/ -v
 
 test-cov:
-	uv run pytest tests/ -v --cov=src/orchestrator --cov-report=term-missing --cov-report=html
+	uv run pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=html
 
 # Code quality
 lint:
-	uv run ruff check src/ tests/
+	uv run ruff check app/ tests/
 
 format:
-	uv run ruff format src/ tests/
-	uv run ruff check --fix src/ tests/
+	uv run ruff format app/ tests/
+	uv run ruff check --fix app/ tests/
 
 type-check:
-	uv run ty check src/
+	uv run ty check app/
 
 security:
-	uv run bandit -r src/ -ll
+	uv run bandit -r app/ -ll
 
 # Run all checks
 check: lint type-check test

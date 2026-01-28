@@ -53,7 +53,7 @@ cp .env.example .env
 make run
 
 # Or directly with uvicorn
-uvicorn orchestrator.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Using Docker
@@ -144,7 +144,7 @@ curl http://localhost:8000/api/v1/ready
 
 ```
 contact-center-orchestrator/
-├── src/orchestrator/
+├── app/
 │   ├── api/v1/endpoints/     # API endpoints
 │   ├── config/               # Configuration
 │   ├── models/               # Pydantic models
@@ -188,15 +188,15 @@ This project uses **Ruff** for both linting and formatting:
 ```bash
 # Lint code (check for issues)
 make lint
-# or: uv run ruff check src/ tests/
+# or: uv run ruff check app/ tests/
 
 # Format code (auto-fix formatting)
 make format
-# or: uv run ruff format src/ tests/
+# or: uv run ruff format app/ tests/
 
 # Format and fix linting issues
-uv run ruff format src/ tests/
-uv run ruff check --fix src/ tests/
+uv run ruff format app/ tests/
+uv run ruff check --fix app/ tests/
 ```
 
 Ruff configuration is in `pyproject.toml` under `[tool.ruff]`:
@@ -211,7 +211,7 @@ This project uses **ty**, Astral's extremely fast type checker (10x-100x faster 
 ```bash
 # Run type checker
 make type-check
-# or: uv run ty check src/
+# or: uv run ty check app/
 ```
 
 ty configuration is in `pyproject.toml` under `[tool.ty]`. ty automatically provides:

@@ -2,7 +2,7 @@
 
 import pytest
 
-from orchestrator.workflows import (
+from app.workflows import (
     InformationalWorkflow,
     SafetyComplianceWorkflow,
     ServiceActionWorkflow,

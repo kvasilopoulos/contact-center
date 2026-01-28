@@ -1,177 +1,338 @@
-# Terraform Infrastructure
+# AWS Fargate Deployment with Terraform
 
-This directory contains Terraform configuration for deploying the Contact Center AI Orchestrator to AWS ECS.
+Simple Terraform configuration to deploy the Cost Center AI Orchestrator to AWS Fargate.
 
-## Structure
+## Features
+
+- **Uses Default VPC** - No custom networking required
+- **Fargate** - Serverless containers, pay only for what you use
+- **Auto Scaling** - Scales based on CPU/Memory usage
+- **Application Load Balancer** - Distributes traffic across tasks
+- **ECR** - Private Docker registry
+- **Secrets Manager** - Secure API key storage
+
+## Architecture
 
 ```
-terraform/
-├── main.tf                 # Main infrastructure configuration
-├── variables.tf            # Input variables
-├── outputs.tf              # Output values
-├── environments/           # Environment-specific configurations
-│   ├── staging.tfvars      # Staging environment variables
-│   └── production.tfvars   # Production environment variables
-└── modules/                # Reusable Terraform modules
-    ├── vpc/                # VPC and networking
-    ├── security_groups/    # Security group configurations
-    ├── iam/                # IAM roles and policies
-    ├── ecs/                # ECS cluster
-    ├── alb/                # Application Load Balancer
-    ├── secrets/            # Secrets Manager
-    ├── ecs_service/        # ECS service and task definitions
-    └── monitoring/         # CloudWatch alarms
+Internet → ALB → ECS Fargate Tasks (Default VPC) → OpenAI API
+                        ↓
+                 Secrets Manager
 ```
+
+## Prerequisites
+
+1. **AWS CLI** configured with credentials
+   ```bash
+   aws configure
+   ```
+
+2. **Terraform** (1.5.0+)
+   ```bash
+   terraform --version
+   ```
+
+3. **Docker** for building images
+   ```bash
+   docker --version
+   ```
+
+4. **OpenAI API Key**
+   Get from: https://platform.openai.com/api-keys
 
 ## Quick Start
 
-### Initialize Terraform
+### 1. Set OpenAI API Key
+
+```bash
+export TF_VAR_openai_api_key="sk-your-openai-api-key"
+```
+
+### 2. Deploy Infrastructure
 
 ```bash
 cd terraform
 terraform init
+terraform apply
 ```
 
-### Plan Deployment
+This creates:
+- ECS Fargate cluster (1 task with 0.25 vCPU, 0.5 GB)
+- Application Load Balancer
+- ECR repository
+- Security groups
+- IAM roles
+- SSM Parameter (SecureString)
+
+**Duration:** ~5 minutes
+
+### 3. Build and Push Docker Image
 
 ```bash
-# Staging
-terraform plan \
-  -var-file=environments/staging.tfvars \
-  -var="container_image=ghcr.io/your-org/repo:tag" \
-  -var="openai_api_key=$OPENAI_API_KEY"
+# Get ECR URL
+ECR_URL=$(terraform output -raw ecr_repository_url)
+REGION=$(terraform output -raw aws_region)
 
-# Production
-terraform plan \
-  -var-file=environments/production.tfvars \
-  -var="container_image=ghcr.io/your-org/repo:tag" \
-  -var="openai_api_key=$OPENAI_API_KEY"
+# Authenticate
+aws ecr get-login-password --region $REGION | \
+  docker login --username AWS --password-stdin $ECR_URL
+
+# Build and push
+cd ..
+docker build -t cost-center-orchestrator:latest .
+docker tag cost-center-orchestrator:latest $ECR_URL:latest
+docker push $ECR_URL:latest
 ```
 
-### Apply Changes
+### 4. Update Service with Image
 
 ```bash
-# Staging
-terraform apply \
-  -var-file=environments/staging.tfvars \
-  -var="container_image=ghcr.io/your-org/repo:tag" \
-  -var="openai_api_key=$OPENAI_API_KEY"
-
-# Production
-terraform apply \
-  -var-file=environments/production.tfvars \
-  -var="container_image=ghcr.io/your-org/repo:tag" \
-  -var="openai_api_key=$OPENAI_API_KEY"
+cd terraform
+terraform apply -var="container_image=$ECR_URL:latest" -auto-approve
 ```
 
-## Environment Variables
-
-Required variables:
-- `container_image`: Docker image URI
-- `openai_api_key`: OpenAI API key (set via `TF_VAR_openai_api_key`)
-
-Optional variables:
-- `acm_certificate_arn`: ACM certificate for HTTPS
-- `sns_alert_topic_arn`: SNS topic for CloudWatch alarms
-
-## Outputs
-
-After deployment, Terraform provides these outputs:
+### 5. Test the API
 
 ```bash
-# Get ALB URL
-terraform output alb_url
+ALB_URL=$(terraform output -raw alb_url)
 
-# Get ECS cluster name
-terraform output ecs_cluster_name
+# Health check
+curl $ALB_URL/api/v1/health
 
-# Get all outputs
-terraform output
+# Test classification
+curl -X POST $ALB_URL/api/v1/classify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What is your refund policy?",
+    "channel": "chat"
+  }'
 ```
 
-## State Management
+## Using the Deploy Script
 
-For production use, configure remote state:
+A helper script is provided for easier deployment:
+
+```bash
+# Deploy infrastructure
+export TF_VAR_openai_api_key="sk-..."
+./scripts/deploy.sh deploy
+
+# Build and push image, update service
+./scripts/deploy.sh push
+
+# Show deployment info
+./scripts/deploy.sh info
+
+# Destroy everything
+./scripts/deploy.sh destroy
+```
+
+## Configuration
+
+### Variables
+
+Edit variables in `terraform apply` command or create a `terraform.tfvars` file:
 
 ```hcl
-# Uncomment in main.tf
-backend "s3" {
-  bucket         = "your-terraform-state-bucket"
-  key            = "orchestrator/terraform.tfstate"
-  region         = "us-east-1"
-  dynamodb_table = "terraform-state-lock"
-  encrypt        = true
-}
+# terraform.tfvars
+aws_region       = "us-east-1"
+project_name     = "cost-center-orchestrator"
+container_cpu    = 256      # 0.25 vCPU (cost-optimized)
+container_memory = 512      # 0.5 GB (cost-optimized)
+desired_count    = 1        # Number of tasks (cost-optimized)
+min_capacity     = 1        # Min tasks for auto-scaling
+max_capacity     = 2        # Max tasks for auto-scaling
 ```
 
-## Module Documentation
+### Scaling
 
-### VPC Module
-Creates VPC with public and private subnets, NAT gateways, and routing tables.
+The service auto-scales based on:
+- **CPU**: Scales out when > 70%
+- **Memory**: Scales out when > 80%
 
-### Security Groups Module
-Configures security groups for ALB and ECS tasks.
+To manually scale:
+```bash
+terraform apply -var="desired_count=3"
+```
 
-### IAM Module
-Creates task execution role and task role with required permissions.
+## Updating the Application
 
-### ECS Module
-Sets up ECS cluster with Fargate capacity providers.
+### Deploy New Version
 
-### ALB Module
-Creates Application Load Balancer, target group, and listeners.
+```bash
+# 1. Build new image
+docker build -t cost-center-orchestrator:v2 .
 
-### Secrets Module
-Manages secrets in AWS Secrets Manager.
+# 2. Tag and push
+docker tag cost-center-orchestrator:v2 $ECR_URL:latest
+docker push $ECR_URL:latest
 
-### ECS Service Module
-Configures ECS service, task definition, and auto-scaling policies.
+# 3. Update service
+cd terraform
+terraform apply -var="container_image=$ECR_URL:latest" -auto-approve
+```
 
-### Monitoring Module
-Sets up CloudWatch alarms for monitoring.
+Or simply:
+```bash
+./scripts/deploy.sh push
+```
+
+### Rollback
+
+```bash
+# Push previous image tag
+docker tag cost-center-orchestrator:v1 $ECR_URL:latest
+docker push $ECR_URL:latest
+
+# Force new deployment
+cd terraform
+terraform apply -var="container_image=$ECR_URL:latest" -auto-approve
+```
+
+## Monitoring
+
+### Check Service Status
+
+```bash
+CLUSTER=$(terraform output -raw ecs_cluster_name)
+SERVICE=$(terraform output -raw ecs_service_name)
+
+# Service details
+aws ecs describe-services --cluster $CLUSTER --services $SERVICE
+
+# List tasks
+aws ecs list-tasks --cluster $CLUSTER --service-name $SERVICE
+
+# Task details
+TASK_ARN=$(aws ecs list-tasks --cluster $CLUSTER --service-name $SERVICE --query 'taskArns[0]' --output text)
+aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK_ARN
+```
+
+### View Metrics in AWS Console
+
+1. Go to ECS Console
+2. Select your cluster
+3. View Service → Metrics tab
+4. Monitor CPU, Memory, Request count
+
+## Cost Estimation
+
+### Fargate Pricing (us-east-1)
+
+| Configuration | vCPU | Memory | Cost/hour | Cost/month* |
+|--------------|------|--------|-----------|-------------|
+| **Current (Optimized)** | **0.25** | **0.5 GB** | **$0.0134** | **~$9.78** |
+| Standard     | 0.5  | 1 GB   | $0.0247   | ~$18.03     |
+| Enhanced     | 1    | 2 GB   | $0.0494   | ~$36.06     |
+
+*Based on 1 task running 24/7
+
+### Additional Costs
+
+- **ALB**: ~$16-20/month (fixed)
+- **Data Transfer**: ~$1/month (10GB)
+- **ECR Storage**: ~$0.10/GB/month
+- **SSM Parameter Store**: ~$0.00/month (FREE!)
+
+### Total Estimate (Optimized Config)
+
+- **1 task × 0.25 vCPU, 0.5 GB**: ~$9.78/month ✅
+- **ALB**: ~$18/month
+- **ECR + Data Transfer**: ~$1.10/month
+- **SSM Parameter**: ~$0.00/month (FREE!)
+- **Total**: **~$28.88/month** 🎉
+
+**Savings: $61.12/month (68% reduction from $90)**
+
+### Cost Optimization
+
+✅ **Already optimized!** Current configuration uses:
+- 1 task (instead of 2)
+- 0.25 vCPU (instead of 0.5)
+- 0.5 GB RAM (instead of 1 GB)
+- SSM Parameter Store (instead of Secrets Manager)
+
+**To scale up for production:**
+   ```bash
+   terraform apply -var="desired_count=2" -var="container_cpu=512" -var="container_memory=1024"
+   ```
+
+3. **Schedule scaling** (requires additional setup):
+   - Scale down to 1 task during off-hours
+   - Scale to 0 on weekends (requires custom setup)
 
 ## Troubleshooting
 
-### State Lock Issues
+### Tasks Not Starting
 
+Check task status:
 ```bash
-# Force unlock (use with caution)
-terraform force-unlock LOCK_ID
+aws ecs describe-services --cluster $CLUSTER --services $SERVICE --query 'services[0].events[0:5]'
 ```
 
-### Destroy Resources
+Common issues:
+- Invalid OpenAI API key in Secrets Manager
+- Insufficient IAM permissions
+- Image not found in ECR
+- Resource limits too low
 
+### Health Check Failures
+
+Check ALB target health:
 ```bash
-terraform destroy \
-  -var-file=environments/staging.tfvars \
-  -var="container_image=ghcr.io/your-org/repo:tag" \
-  -var="openai_api_key=$OPENAI_API_KEY"
+TARGET_GROUP=$(terraform output -raw target_group_arn 2>/dev/null || \
+  aws elbv2 describe-target-groups --query 'TargetGroups[?contains(TargetGroupName, `cost-center`)].TargetGroupArn | [0]' --output text)
+  
+aws elbv2 describe-target-health --target-group-arn $TARGET_GROUP
 ```
 
-### Validate Configuration
+### Deployment Stuck
 
+Force new deployment:
 ```bash
-terraform validate
+aws ecs update-service --cluster $CLUSTER --service $SERVICE --force-new-deployment
 ```
 
-### Format Configuration
+## Cleanup
+
+### Destroy All Resources
 
 ```bash
-terraform fmt -recursive
+cd terraform
+terraform destroy
 ```
 
-## Best Practices
+Or:
+```bash
+./scripts/deploy.sh destroy
+```
 
-1. **Use workspaces** for multiple environments
-2. **Enable remote state** with S3 backend
-3. **Use state locking** with DynamoDB
-4. **Never commit** sensitive values
-5. **Review plans** before applying
-6. **Tag resources** appropriately
-7. **Use modules** for reusability
+**Note:** This will delete:
+- ECS cluster and tasks
+- Load balancer
+- ECR repository and images
+- Security groups
+- IAM roles
+- Secrets
+
+## Security Best Practices
+
+1. **Never commit secrets** to version control
+2. **Use IAM roles** instead of access keys
+3. **Rotate API keys** regularly
+4. **Review security groups** - restrict to known IPs if needed
+5. **Enable MFA** on AWS account
+6. **Use separate AWS accounts** for prod/dev
 
 ## Additional Resources
 
+- [AWS Fargate Pricing](https://aws.amazon.com/fargate/pricing/)
+- [ECS Best Practices](https://docs.aws.amazon.com/AmazonECS/latest/bestpracticesguide/intro.html)
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-- [Full Deployment Guide](../docs/AWS_DEPLOYMENT.md)
-- [Quick Start Guide](../docs/AWS_QUICK_START.md)
+
+## Support
+
+For issues:
+1. Check AWS ECS console for task errors
+2. Review service events
+3. Check security group rules
+4. Verify OpenAI API key in Secrets Manager

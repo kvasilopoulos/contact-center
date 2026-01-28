@@ -171,9 +171,9 @@ Expected coverage:
 ```
 Name                                    Stmts   Miss  Cover
 -----------------------------------------------------------
-src/orchestrator/api/v1/endpoints/classify.py      45      2    96%
-src/orchestrator/services/classifier.py            62      4    94%
-src/orchestrator/workflows/informational.py        38      3    92%
+app/api/v1/endpoints/classify.py      45      2    96%
+app/services/classifier.py            62      4    94%
+app/workflows/informational.py        38      3    92%
 ...
 -----------------------------------------------------------
 TOTAL                                             350     28    92%

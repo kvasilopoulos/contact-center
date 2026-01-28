@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 import pytest
 
-from orchestrator.services.classifier import ClassificationResult
+from app.services.classifier import ClassificationResult
 
 
 class TestHealthEndpoints:
@@ -56,7 +56,7 @@ class TestClassifyEndpoint:
         self, client: TestClient, mock_classifier: ClassificationResult
     ) -> None:
         """Test classification with valid request."""
-        with patch("orchestrator.api.v1.endpoints.classify.ClassifierService") as MockService:
+        with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
             mock_instance = MockService.return_value
             mock_instance.classify = AsyncMock(return_value=mock_classifier)
             mock_instance.requires_human_review = lambda x: x < 0.5
@@ -78,7 +78,7 @@ class TestClassifyEndpoint:
         self, client: TestClient, mock_classifier: ClassificationResult
     ) -> None:
         """Test classification with specified channel."""
-        with patch("orchestrator.api.v1.endpoints.classify.ClassifierService") as MockService:
+        with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
             mock_instance = MockService.return_value
             mock_instance.classify = AsyncMock(return_value=mock_classifier)
             mock_instance.requires_human_review = lambda x: x < 0.5
@@ -136,7 +136,7 @@ class TestClassifyEndpoint:
         self, client: TestClient, mock_classifier: ClassificationResult
     ) -> None:
         """Test that response has all required fields."""
-        with patch("orchestrator.api.v1.endpoints.classify.ClassifierService") as MockService:
+        with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
             mock_instance = MockService.return_value
             mock_instance.classify = AsyncMock(return_value=mock_classifier)
             mock_instance.requires_human_review = lambda x: x < 0.5

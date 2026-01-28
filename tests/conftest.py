@@ -7,10 +7,10 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 import pytest
 
-from orchestrator.config import Settings, get_settings
-from orchestrator.main import app
-from orchestrator.services.classifier import ClassifierService
-from orchestrator.services.llm_client import LLMClient
+from app.config import Settings, get_settings
+from app.main import app
+from app.services.classifier import ClassifierService
+from app.services.llm_client import LLMClient
 
 
 @pytest.fixture

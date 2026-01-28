@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 import pytest
 
-from orchestrator.main import app
-from orchestrator.services.classifier import ClassificationResult
+from app.main import app
+from app.services.classifier import ClassificationResult
 
 # Skip real LLM tests unless explicitly enabled
 USE_REAL_LLM = os.getenv("E2E_REAL_LLM", "false").lower() == "true"
@@ -76,7 +76,7 @@ class TestClassificationE2E:
             processing_time_ms=100.0,
         )
 
-        with patch("orchestrator.api.v1.endpoints.classify.ClassifierService") as MockService:
+        with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
             mock_instance = MockService.return_value
             mock_instance.classify = AsyncMock(return_value=mock_result)
             mock_instance.requires_human_review = lambda x: x < 0.5
@@ -118,7 +118,7 @@ class TestClassificationE2E:
             processing_time_ms=150.0,
         )
 
-        with patch("orchestrator.api.v1.endpoints.classify.ClassifierService") as MockService:
+        with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
             mock_instance = MockService.return_value
             mock_instance.classify = AsyncMock(return_value=mock_result)
             mock_instance.requires_human_review = lambda x: x < 0.5
@@ -143,7 +143,7 @@ class TestClassificationE2E:
             processing_time_ms=120.0,
         )
 
-        with patch("orchestrator.api.v1.endpoints.classify.ClassifierService") as MockService:
+        with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
             mock_instance = MockService.return_value
             mock_instance.classify = AsyncMock(return_value=mock_result)
             mock_instance.requires_human_review = lambda x: x < 0.5
@@ -167,7 +167,7 @@ class TestClassificationE2E:
             processing_time_ms=80.0,
         )
 
-        with patch("orchestrator.api.v1.endpoints.classify.ClassifierService") as MockService:
+        with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
             mock_instance = MockService.return_value
             mock_instance.classify = AsyncMock(return_value=mock_result)
             mock_instance.requires_human_review = lambda _: True  # Always for safety
@@ -194,7 +194,7 @@ class TestClassificationE2E:
             processing_time_ms=100.0,
         )
 
-        with patch("orchestrator.api.v1.endpoints.classify.ClassifierService") as MockService:
+        with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
             mock_instance = MockService.return_value
             mock_instance.classify = AsyncMock(return_value=mock_result)
             mock_instance.requires_human_review = lambda _: False
@@ -221,7 +221,7 @@ class TestClassificationE2E:
         )
 
         for channel in channels:
-            with patch("orchestrator.api.v1.endpoints.classify.ClassifierService") as MockService:
+            with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
                 mock_instance = MockService.return_value
                 mock_instance.classify = AsyncMock(return_value=mock_result)
                 mock_instance.requires_human_review = lambda _: False

@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from orchestrator.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerOpen, CircuitState
-from orchestrator.middleware.rate_limit import TokenBucket
+from app.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerOpen, CircuitState
+from app.middleware.rate_limit import TokenBucket
 
 
 class TestTokenBucket:

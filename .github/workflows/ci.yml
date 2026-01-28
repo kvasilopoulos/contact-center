@@ -31,10 +31,10 @@ jobs:
         run: uv sync
 
       - name: Run Ruff linter
-        run: uv run ruff check src/ tests/
+        run: uv run ruff check app/ tests/
 
       - name: Run Ruff formatter check
-        run: uv run ruff format --check src/ tests/
+        run: uv run ruff format --check app/ tests/
 
   type-check:
     name: Type Check
@@ -57,7 +57,7 @@ jobs:
         run: uv sync
 
       - name: Run ty type checker
-        run: uv run ty check src/
+        run: uv run ty check app/
 
   security:
     name: Security Scan
@@ -80,7 +80,7 @@ jobs:
         run: uv sync
 
       - name: Run Bandit security scanner
-        run: uv run bandit -r src/ -ll -f json -o bandit-report.json || true
+        run: uv run bandit -r app/ -ll -f json -o bandit-report.json || true
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4
@@ -110,7 +110,7 @@ jobs:
         run: uv sync
 
       - name: Run tests with coverage
-        run: uv run pytest tests/ -v --cov=src/orchestrator --cov-report=xml --cov-report=term-missing
+        run: uv run pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
         env:
           OPENAI_API_KEY: "test-key-for-ci"
 
@@ -151,4 +151,4 @@ jobs:
       - name: Test Docker image
         run: |
           docker build -f docker/Dockerfile -t test-image .
-          docker run --rm -e OPENAI_API_KEY=test-key test-image python -c "from orchestrator.main import app; print('Import successful')"
+          docker run --rm -e OPENAI_API_KEY=test-key test-image python -c "from app.main import app; print('Import successful')"

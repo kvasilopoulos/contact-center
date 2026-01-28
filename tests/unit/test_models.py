@@ -3,12 +3,7 @@
 from pydantic import ValidationError
 import pytest
 
-from orchestrator.models import (
-    ClassificationRequest,
-    ClassificationResponse,
-    HealthResponse,
-    NextStepInfo,
-)
+from app.models import ClassificationRequest, ClassificationResponse, HealthResponse, NextStepInfo
 
 
 class TestClassificationRequest:

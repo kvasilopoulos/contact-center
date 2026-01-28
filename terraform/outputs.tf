@@ -2,68 +2,53 @@
 # Terraform Outputs
 # ============================================
 
-output "vpc_id" {
-  description = "ID of the VPC"
-  value       = module.vpc.vpc_id
-}
-
-output "private_subnet_ids" {
-  description = "IDs of private subnets"
-  value       = module.vpc.private_subnet_ids
-}
-
-output "public_subnet_ids" {
-  description = "IDs of public subnets"
-  value       = module.vpc.public_subnet_ids
-}
-
-output "ecs_cluster_name" {
-  description = "Name of the ECS cluster"
-  value       = module.ecs.cluster_name
-}
-
-output "ecs_cluster_arn" {
-  description = "ARN of the ECS cluster"
-  value       = module.ecs.cluster_arn
-}
-
-output "ecs_service_name" {
-  description = "Name of the ECS service"
-  value       = module.ecs_service.service_name
-}
-
 output "alb_dns_name" {
   description = "DNS name of the Application Load Balancer"
-  value       = module.alb.alb_dns_name
-}
-
-output "alb_zone_id" {
-  description = "Zone ID of the Application Load Balancer"
-  value       = module.alb.alb_zone_id
+  value       = aws_lb.main.dns_name
 }
 
 output "alb_url" {
   description = "URL of the Application Load Balancer"
-  value       = "http://${module.alb.alb_dns_name}"
+  value       = "http://${aws_lb.main.dns_name}"
 }
 
-output "task_execution_role_arn" {
-  description = "ARN of the ECS task execution role"
-  value       = module.iam.task_execution_role_arn
+output "ecs_cluster_name" {
+  description = "Name of the ECS cluster"
+  value       = aws_ecs_cluster.main.name
 }
 
-output "task_role_arn" {
-  description = "ARN of the ECS task role"
-  value       = module.iam.task_role_arn
+output "ecs_service_name" {
+  description = "Name of the ECS service"
+  value       = aws_ecs_service.app.name
 }
 
-output "openai_api_key_secret_arn" {
-  description = "ARN of the OpenAI API key secret in Secrets Manager"
-  value       = module.secrets.openai_api_key_arn
-  sensitive   = true
+output "ecr_repository_url" {
+  description = "URL of the ECR repository"
+  value       = aws_ecr_repository.app.repository_url
 }
 
-output "cloudwatch_log_group" {
-  description = "Name of the CloudWatch log group"
-  value       = aws_cloudwatch_log_group.orchestrator.name
+output "ssm_parameter_name" {
+  description = "Name of the SSM parameter storing OpenAI API key"
+  value       = aws_ssm_parameter.openai_api_key.name
+}
+
+output "aws_region" {
+  description = "AWS region"
+  value       = var.aws_region
+}
+
+output "deployment_commands" {
+  description = "Useful commands for deployment"
+  value       = <<-EOT
+    # Authenticate Docker to ECR
+    aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${aws_ecr_repository.app.repository_url}
+    
+    # Build and push Docker image
+    docker build -t cost-center-orchestrator:latest .
+    docker tag cost-center-orchestrator:latest ${aws_ecr_repository.app.repository_url}:latest
+    docker push ${aws_ecr_repository.app.repository_url}:latest
+    
+    # Test the API
+    curl ${aws_lb.main.dns_name}/api/v1/health
+  EOT
 }

@@ -4,12 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from orchestrator.services.classifier import (
-    ClassificationError,
-    ClassificationResult,
-    ClassifierService,
-)
-from orchestrator.services.llm_client import LLMClientError
+from app.services.classifier import ClassificationError, ClassificationResult, ClassifierService
+from app.services.llm_client import LLMClientError
 
 
 class TestClassifierService:

@@ -62,11 +62,11 @@ contact-center-orchestrator/
 
 ## 2. Core Components
 
-### 2.1 API Layer (`src/orchestrator/api/`)
+### 2.1 API Layer (`app/api/`)
 - **Health endpoints**: `/health` (liveness), `/ready` (readiness)
 - **Classification endpoint**: `POST /api/v1/classify`
 
-### 2.2 Models (`src/orchestrator/models/`)
+### 2.2 Models (`app/models/`)
 **Request Schema:**
 ```python
 class ClassificationRequest(BaseModel):
@@ -86,13 +86,13 @@ class ClassificationResponse(BaseModel):
     processing_time_ms: float       # Latency tracking
 ```
 
-### 2.3 AI Classifier (`src/orchestrator/services/classifier.py`)
+### 2.3 AI Classifier (`app/services/classifier.py`)
 - Single LLM call using structured output
 - **Primary: OpenAI API** (gpt-4o-mini for cost-efficiency)
 - Prompt engineering with clear category definitions
 - JSON response parsing with validation
 
-### 2.4 Workflows (`src/orchestrator/workflows/`)
+### 2.4 Workflows (`app/workflows/`)
 Each workflow handles post-classification logic:
 - **Informational**: FAQ lookup, knowledge base search
 - **Service Action**: Ticket creation, order lookup
@@ -312,13 +312,13 @@ Jobs:
 | File | Purpose |
 |------|---------|
 | `pyproject.toml` | Dependencies, project config |
-| `src/orchestrator/main.py` | FastAPI application |
-| `src/orchestrator/config/settings.py` | Configuration |
-| `src/orchestrator/models/requests.py` | Request schemas |
-| `src/orchestrator/models/responses.py` | Response schemas |
-| `src/orchestrator/services/classifier.py` | AI classifier |
-| `src/orchestrator/services/llm_client.py` | LLM integration |
-| `src/orchestrator/workflows/*.py` | Category workflows |
+| `app/main.py` | FastAPI application |
+| `app/config/settings.py` | Configuration |
+| `app/models/requests.py` | Request schemas |
+| `app/models/responses.py` | Response schemas |
+| `app/services/classifier.py` | AI classifier |
+| `app/services/llm_client.py` | LLM integration |
+| `app/workflows/*.py` | Category workflows |
 | `docker/Dockerfile` | Container definition |
 | `docker/docker-compose.yml` | Local dev stack |
 | `.github/workflows/ci.yml` | CI pipeline |
