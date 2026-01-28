@@ -1,4 +1,4 @@
-"""Application settings using Pydantic Settings."""
+"""Application configuration settings."""
 
 from functools import lru_cache
 from typing import Literal
@@ -54,3 +54,6 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance."""
     return Settings()
+
+
+__all__ = ["Settings", "get_settings"]

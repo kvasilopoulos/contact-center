@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import structlog
 
 from app.config import Settings, get_settings
-from app.models import ClassificationRequest, ClassificationResponse, NextStepInfo
+from app.schemas import ClassificationRequest, ClassificationResponse, NextStepInfo
 from app.services.classifier import ClassificationError, ClassifierService
 from app.workflows import InformationalWorkflow, SafetyComplianceWorkflow, ServiceActionWorkflow
 from app.workflows.base import WorkflowResult

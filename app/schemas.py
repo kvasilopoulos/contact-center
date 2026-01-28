@@ -1,12 +1,65 @@
-"""Response models for the API."""
+"""Application data models and schemas."""
 
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-CategoryType = Literal["informational", "service_action", "safety_compliance"]
+# Type aliases
 ChannelType = Literal["chat", "voice", "mail"]
+CategoryType = Literal["informational", "service_action", "safety_compliance"]
+
+
+# ============================================================================
+# Request Models
+# ============================================================================
+
+
+class ClassificationRequest(BaseModel):
+    """Request model for message classification."""
+
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=5000,
+        description="The customer message to classify",
+        examples=["What is your refund policy for prescription products?"],
+    )
+    channel: ChannelType = Field(
+        default="chat",
+        description="The communication channel the message originated from",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional metadata about the message context",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "message": "What is your refund policy for prescription products?",
+                    "channel": "chat",
+                    "metadata": {"customer_id": "C123"},
+                },
+                {
+                    "message": "I need to open a ticket because my order never arrived.",
+                    "channel": "mail",
+                    "metadata": {"order_id": "ORD-456"},
+                },
+                {
+                    "message": "I experienced a severe headache after taking the medication.",
+                    "channel": "voice",
+                    "metadata": {"product_id": "MED-789"},
+                },
+            ]
+        }
+    }
+
+
+# ============================================================================
+# Response Models
+# ============================================================================
 
 
 class NextStepInfo(BaseModel):
@@ -131,3 +184,14 @@ class ErrorResponse(BaseModel):
         default=None,
         description="Additional error details",
     )
+
+
+__all__ = [
+    "CategoryType",
+    "ChannelType",
+    "ClassificationRequest",
+    "ClassificationResponse",
+    "ErrorResponse",
+    "HealthResponse",
+    "NextStepInfo",
+]
