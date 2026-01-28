@@ -1,4 +1,4 @@
-# Contact Center AI Orchestrator
+# Cost Center AI Orchestrator
 
 A scalable FastAPI service that classifies customer messages into categories (informational, service_action, safety_compliance) using AI, with end-to-end workflows for each category.
 
@@ -21,13 +21,14 @@ A scalable FastAPI service that classifies customer messages into categories (in
 - [uv](https://github.com/astral-sh/uv) - Fast Python package manager
 - OpenAI API key
 - Docker (optional)
+- [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/) (optional, for public demos)
 
 ### Installation
 
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd contact-center-orchestrator
+cd cost-center-orchestrator
 
 # Install uv if you haven't already
 # On macOS/Linux:
@@ -56,42 +57,86 @@ make run
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### 🌐 Public Demo with Cloudflare Tunnel
+
+Want to share your local API publicly? Use the built-in tunnel with automatic DNS updates:
+
+```bash
+# Quick setup (2 minutes)
+# See QUICK_START.md for detailed instructions
+
+# 1. Get Netlify token and add to .env
+# 2. Start your API
+make run
+
+# 3. Start tunnel (in another terminal)
+make tunnel
+```
+
+Your API will be automatically available at `https://demo.kvasilopoulos.com` with automatic DNS updates! 
+
+📖 **Full guide:** [QUICK_START.md](QUICK_START.md) | [Token Setup](docs/NETLIFY_TOKEN_SETUP.md)
+
 ### Using Docker
 
 ```bash
 # Build and run with docker-compose
-docker-compose -f docker/docker-compose.yml up --build
+docker-compose up --build
 
 # Or build manually
-docker build -f docker/Dockerfile -t contact-center-orchestrator .
-docker run -p 8000:8000 -e OPENAI_API_KEY=your-key contact-center-orchestrator
+docker build -t cost-center-orchestrator .
+docker run -p 8000:8000 -e OPENAI_API_KEY=your-key cost-center-orchestrator
 ```
 
-### Deploying to AWS ECS
+## Deployment Options
 
-The application can be deployed to AWS ECS (Elastic Container Service) with complete infrastructure automation:
+### 🚀 Option 1: Render.com (Easiest - Free Tier Available)
+
+Deploy to the cloud in 5 minutes with free HTTPS:
+
+1. Push your code to GitHub
+2. Go to https://render.com and sign up
+3. Click "New +" → "Blueprint"
+4. Connect your repo (will detect `render.yaml`)
+5. Set `OPENAI_API_KEY` environment variable
+6. Deploy!
+
+**Result:** Your API at `https://your-app.onrender.com`
+
+📖 **Full guide:** [docs/RENDER_DEPLOYMENT.md](docs/RENDER_DEPLOYMENT.md)
+
+**Free tier:** Perfect for demos (sleeps after 15 min inactivity)  
+**Paid tier:** $7/month for always-on service
+
+### ☁️ Option 2: AWS Fargate (Production-Ready)
+
+Deploy to AWS Fargate with Terraform in ~10 minutes:
 
 ```bash
-# Quick start (see docs/AWS_QUICK_START.md for details)
+# Set OpenAI API key
+export TF_VAR_openai_api_key="sk-..."
+
+# Deploy infrastructure
 cd terraform
 terraform init
-terraform apply -var-file=environments/staging.tfvars
+terraform apply
+
+# Build and push Docker image
+./scripts/deploy.sh push
 ```
 
 **Features:**
-- ✅ Production-ready AWS infrastructure with Terraform
+- ✅ Serverless containers with AWS Fargate
+- ✅ Uses default VPC (no custom networking)
 - ✅ Auto-scaling based on CPU and memory
-- ✅ Application Load Balancer with health checks
-- ✅ Automated deployments via GitHub Actions
-- ✅ CloudWatch monitoring and alarms
-- ✅ Secure secrets management with AWS Secrets Manager
+- ✅ Application Load Balancer
+- ✅ Secure secrets management
+- ✅ Simple single-file Terraform configuration
 
 **Documentation:**
-- 📘 [Quick Start Guide](docs/AWS_QUICK_START.md) - Deploy in 5 steps (~15 minutes)
-- 📗 [Full Deployment Guide](docs/AWS_DEPLOYMENT.md) - Complete reference
-- 📙 [Terraform README](terraform/README.md) - Infrastructure details
+- 📘 [Terraform README](terraform/README.md) - Complete deployment guide
 
-**Estimated Cost:** ~$110-120/month for staging environment
+**Estimated Cost:** ~$90/month (2 tasks with 0.5 vCPU, 1 GB each)
 
 ## API Usage
 
@@ -143,7 +188,7 @@ curl http://localhost:8000/api/v1/ready
 ## Project Structure
 
 ```
-contact-center-orchestrator/
+cost-center-orchestrator/
 ├── app/
 │   ├── api/v1/endpoints/     # API endpoints
 │   ├── config/               # Configuration

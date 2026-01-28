@@ -5,7 +5,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: contact-center-orchestrator
+    container_name: cost-center-orchestrator
     ports:
       - "8000:8000"
     environment:

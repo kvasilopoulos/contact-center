@@ -2,7 +2,7 @@
 
 # Default target
 help:
-	@echo "Contact Center AI Orchestrator - Available commands:"
+	@echo "Cost Center AI Orchestrator - Available commands:"
 	@echo ""
 	@echo "Development:"
 	@echo "  make install       Install production dependencies"
@@ -26,6 +26,7 @@ help:
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean         Clean build artifacts"
+	@echo "  make tunnel        Start Cloudflare tunnel with Netlify DNS update"
 
 # Installation
 install:
@@ -37,7 +38,7 @@ install-dev:
 
 # Run development server
 run:
-	uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	uv run fastapi run
 
 # Testing
 test:
@@ -72,6 +73,12 @@ docker-run:
 
 docker-down:
 	docker-compose -f docker/docker-compose.yml down
+
+# Tunnel with Netlify DNS auto-update
+tunnel:
+	@echo "Starting Cloudflare tunnel with Netlify DNS auto-update..."
+	@echo "Make sure NETLIFY_TOKEN is set in your environment"
+	uv run python scripts/tunnel.py
 
 # Clean up
 clean:

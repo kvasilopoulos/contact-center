@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ============================================
-# Contact Center AI Orchestrator - Dockerfile
+# Cost Center AI Orchestrator - Dockerfile
 # ============================================
 
 # Build stage
