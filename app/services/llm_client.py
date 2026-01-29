@@ -1,5 +1,6 @@
 """LLM client for OpenAI API integration."""
 
+from io import BytesIO
 import json
 from typing import Any
 
@@ -9,6 +10,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from app.config import Settings
 from app.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
+from app.prompts import registry
 
 logger = structlog.get_logger(__name__)
 
@@ -157,6 +159,83 @@ class LLMClient:
         except OpenAIError as e:
             logger.error("OpenAI API error", error=str(e))
             raise LLMClientError(f"OpenAI API error: {e}") from e
+
+    async def complete_with_template(
+        self,
+        template_id: str,
+        variables: dict[str, Any],
+        version: str | None = None,
+        experiment_id: str | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Send a completion request using a prompt template.
+
+        Args:
+            template_id: ID of the prompt template to use
+            variables: Variables to substitute in the template
+            version: Optional specific version to use. If None, uses active version.
+            experiment_id: Optional experiment ID for A/B testing
+
+        Returns:
+            Tuple of (LLM response, metadata) where metadata contains:
+                - prompt_id: The prompt ID used
+                - version: The prompt version used
+                - variant: The variant name (for experiments) or "active"
+                - experiment_id: The experiment ID (if applicable)
+
+        Raises:
+            LLMClientError: If the request fails or response is invalid
+            LLMServiceUnavailable: If circuit breaker is open
+            KeyError: If the template is not found
+            ValueError: If template rendering fails
+        """
+        # Get template from registry (handles experiments if specified)
+        if experiment_id:
+            template, metadata = registry.get_for_experiment(template_id, experiment_id)
+        elif version:
+            template = registry.get(template_id, version)
+            metadata = {
+                "prompt_id": template_id,
+                "version": version,
+                "variant": "specified",
+            }
+        else:
+            template = registry.get_active(template_id)
+            metadata = {
+                "prompt_id": template_id,
+                "version": template.version,
+                "variant": "active",
+            }
+
+        # Render user prompt with variables
+        try:
+            user_prompt = template.render_user_prompt(variables)
+        except ValueError as e:
+            logger.error(
+                "Failed to render prompt template",
+                template_id=template_id,
+                version=metadata["version"],
+                error=str(e),
+            )
+            raise
+
+        # Log prompt usage
+        logger.info(
+            "Using prompt template",
+            prompt_id=metadata["prompt_id"],
+            version=metadata["version"],
+            variant=metadata.get("variant"),
+            experiment_id=metadata.get("experiment_id"),
+        )
+
+        # Use LLM config from template
+        llm_response = await self.complete(
+            system_prompt=template.system_prompt,
+            user_prompt=user_prompt,
+            temperature=template.llm_config.temperature,
+            max_tokens=template.llm_config.max_tokens,
+        )
+
+        return llm_response, metadata
 
     @property
     def circuit_breaker_stats(self) -> dict[str, Any]:

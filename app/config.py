@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # OpenAI Configuration
     openai_api_key: SecretStr = Field(default=SecretStr(""))
     openai_model: str = "gpt-4o-mini"
+    # Default speech model for audio transcription / speech tasks
+    openai_speech_model: str = "gpt-4o-mini-transcribe"
     openai_timeout: float = 30.0
     openai_max_retries: int = 3
 
