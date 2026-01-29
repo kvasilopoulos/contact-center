@@ -1,14 +1,21 @@
 """LLM client for OpenAI API integration."""
 
-from io import BytesIO
+from __future__ import annotations
+
+import asyncio
+import base64
+import contextlib
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from openai import AsyncOpenAI, OpenAIError
 import structlog
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+import websockets
+from websockets.client import WebSocketClientProtocol
 
-from app.config import Settings
+if TYPE_CHECKING:
+    from app.config import Settings
 from app.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from app.prompts import registry
 
@@ -108,14 +115,49 @@ class LLMClient:
                 retry_after=e.retry_after,
             ) from e
 
+    async def _do_complete_with_model(
+        self,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> dict[str, Any]:
+        """Internal method to perform LLM call with specific model.
+
+        This wraps _do_complete but allows specifying a different model.
+        """
+        try:
+            result: dict[str, Any]
+            async with self._circuit_breaker:
+                result = await self._do_complete_internal(
+                    model=model,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            return result
+        except CircuitBreakerOpen as e:
+            logger.warning(
+                "Circuit breaker open - LLM service unavailable",
+                retry_after=e.retry_after,
+                circuit_state=self._circuit_breaker.state.value,
+            )
+            raise LLMServiceUnavailable(
+                "LLM service temporarily unavailable. Please try again later.",
+                retry_after=e.retry_after,
+            ) from e
+
     @retry(
         retry=retry_if_exception_type(OpenAIError),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
     )
-    async def _do_complete(
+    async def _do_complete_internal(
         self,
+        model: str,
         system_prompt: str,
         user_prompt: str,
         temperature: float,
@@ -125,12 +167,12 @@ class LLMClient:
         try:
             logger.debug(
                 "Sending LLM request",
-                model=self.settings.openai_model,
+                model=model,
                 user_prompt_length=len(user_prompt),
             )
 
             response = await self.client.chat.completions.create(
-                model=self.settings.openai_model,
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -146,7 +188,7 @@ class LLMClient:
 
             logger.debug(
                 "LLM response received",
-                model=self.settings.openai_model,
+                model=model,
                 usage=response.usage.model_dump() if response.usage else None,
             )
 
@@ -159,6 +201,28 @@ class LLMClient:
         except OpenAIError as e:
             logger.error("OpenAI API error", error=str(e))
             raise LLMClientError(f"OpenAI API error: {e}") from e
+
+    @retry(
+        retry=retry_if_exception_type(OpenAIError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
+    )
+    async def _do_complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> dict[str, Any]:
+        """Internal method to perform the actual LLM call with retries (legacy wrapper)."""
+        return await self._do_complete_internal(
+            model=self.settings.openai_model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
     async def complete_with_template(
         self,
@@ -218,6 +282,21 @@ class LLMClient:
             )
             raise
 
+        # Determine which model to use: variant override > template config > global default
+        model_to_use = self.settings.openai_model
+        if experiment_id and metadata.get("experiment_id"):
+            # Check if variant has model override
+            experiment = registry.get_experiment(experiment_id)
+            if experiment:
+                for variant in experiment.variants:
+                    if variant.name == metadata.get("variant") and variant.model:
+                        model_to_use = variant.model
+                        break
+
+        # Fall back to template model if specified and no variant override
+        if model_to_use == self.settings.openai_model and template.llm_config.model:
+            model_to_use = template.llm_config.model
+
         # Log prompt usage
         logger.info(
             "Using prompt template",
@@ -225,17 +304,198 @@ class LLMClient:
             version=metadata["version"],
             variant=metadata.get("variant"),
             experiment_id=metadata.get("experiment_id"),
+            model=model_to_use,
         )
 
-        # Use LLM config from template
-        llm_response = await self.complete(
+        # Use LLM config from template with dynamic model
+        llm_response = await self._do_complete_with_model(
+            model=model_to_use,
             system_prompt=template.system_prompt,
             user_prompt=user_prompt,
             temperature=template.llm_config.temperature,
             max_tokens=template.llm_config.max_tokens,
         )
 
+        # Add model to metadata
+        metadata["model"] = model_to_use
+
         return llm_response, metadata
+
+    async def classify_audio_realtime(
+        self,
+        audio: bytes,
+        channel: str = "voice",
+    ) -> dict[str, Any]:
+        """Classify audio using the Realtime API without explicit transcription.
+
+        This method:
+        - Creates a Realtime WebSocket session
+        - Configures it with the classification system prompt
+        - Sends the audio via input_audio_buffer events
+        - Waits for a textual response containing JSON classification
+        - Parses and returns the JSON object
+
+        The caller is responsible for mapping the JSON into domain models.
+        """
+        try:
+            async with self._circuit_breaker:
+                return await self._do_classify_audio_realtime(audio=audio, channel=channel)
+        except CircuitBreakerOpen as e:
+            logger.warning(
+                "Circuit breaker open - Realtime service unavailable",
+                retry_after=e.retry_after,
+                circuit_state=self._circuit_breaker.state.value,
+            )
+            raise LLMServiceUnavailable(
+                "Realtime service temporarily unavailable. Please try again later.",
+                retry_after=e.retry_after,
+            ) from e
+
+    async def _do_classify_audio_realtime(
+        self,
+        audio: bytes,
+        channel: str,
+    ) -> dict[str, Any]:
+        """Internal helper to classify audio via Realtime WebSocket."""
+        api_key = self.settings.openai_api_key.get_secret_value()
+        if not api_key:
+            raise LLMClientError("OpenAI API key not configured")
+
+        # Get classification prompt template for system instructions
+        template = registry.get_active("classification")
+
+        # System instructions: reuse existing classification system prompt,
+        # and explicitly require JSON-only output (already enforced by prompt).
+        instructions = template.system_prompt
+
+        # Small text preamble to give the model context about the channel.
+        input_text = (
+            f"CHANNEL: {channel}\n\nCUSTOMER AUDIO FOLLOWS. "
+            "Listen to the audio and classify it according to the instructions."
+        )
+
+        # Base64-encode the audio; assume client sends a WAV file.
+        audio_b64 = base64.b64encode(audio).decode("ascii")
+
+        url = f"wss://api.openai.com/v1/realtime?model={self.settings.openai_realtime_model}"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "OpenAI-Beta": "realtime=v1",
+        }
+
+        logger.debug(
+            "Opening Realtime WebSocket for audio classification",
+            model=self.settings.openai_realtime_model,
+            audio_bytes=len(audio),
+        )
+
+        try:
+            async with websockets.connect(url, extra_headers=headers) as ws:
+                assert isinstance(ws, WebSocketClientProtocol)
+
+                # 1) Configure session with instructions (system prompt)
+                session_update = {
+                    "type": "session.update",
+                    "session": {
+                        "instructions": instructions,
+                    },
+                }
+                await ws.send(json.dumps(session_update))
+
+                # 2) Send a small text message describing the channel
+                input_text_event = {
+                    "type": "input_text",
+                    "text": input_text,
+                }
+                await ws.send(json.dumps(input_text_event))
+
+                # 3) Append audio to input buffer
+                append_event = {
+                    "type": "input_audio_buffer.append",
+                    "audio": audio_b64,
+                    "format": "wav",
+                }
+                await ws.send(json.dumps(append_event))
+
+                # 4) Commit audio buffer so the model starts processing
+                commit_event = {
+                    "type": "input_audio_buffer.commit",
+                }
+                await ws.send(json.dumps(commit_event))
+
+                # 5) Create a response (tell the model to respond)
+                response_create = {
+                    "type": "response.create",
+                }
+                await ws.send(json.dumps(response_create))
+
+                # 6) Listen for a textual response containing JSON classification
+                try:
+                    return await self._wait_for_realtime_json_response(ws)
+                finally:
+                    # Best-effort close
+                    with contextlib.suppress(Exception):
+                        await ws.close()
+                    except Exception:
+                        pass
+        except asyncio.TimeoutError as e:
+            logger.error("Realtime classification timed out", error=str(e))
+            raise LLMClientError("Realtime audio classification timed out") from e
+        except Exception as e:
+            logger.error("Realtime WebSocket error", error=str(e))
+            raise LLMClientError(f"Realtime audio classification failed: {e}") from e
+
+    async def _wait_for_realtime_json_response(
+        self,
+        ws: WebSocketClientProtocol,
+        timeout_seconds: float | None = 30.0,
+    ) -> dict[str, Any]:
+        """Wait for a Realtime response that contains JSON classification.
+
+        This implementation looks for response events with text content and
+        attempts to parse the last non-empty text chunk as JSON.
+        """
+
+        async def _inner() -> dict[str, Any]:
+            last_text: str | None = None
+            while True:
+                raw = await ws.recv()
+                try:
+                    event = json.loads(raw)
+                except json.JSONDecodeError:
+                    # Ignore non-JSON frames
+                    continue
+
+                event_type = event.get("type")
+
+                # Collect any text deltas/content from response output
+                if event_type in {"response.output_text.delta", "response.output_text.done"}:
+                    delta = event.get("delta") or event.get("text")
+                    if isinstance(delta, str) and delta:
+                        last_text = (last_text or "") + delta
+
+                # When the response is completed, try to parse JSON from accumulated text
+                if event_type == "response.completed":
+                    if not last_text:
+                        raise LLMClientError("Realtime response contained no text output")
+                    try:
+                        return json.loads(last_text)
+                    except json.JSONDecodeError as e:
+                        logger.error(
+                            "Failed to parse Realtime response text as JSON",
+                            error=str(e),
+                            text_preview=last_text[:200],
+                        )
+                        raise LLMClientError("Realtime response was not valid JSON") from e
+
+                # If an error event arrives from the server, surface it
+                if event_type == "error":
+                    message = event.get("error", {}).get("message", "Unknown Realtime error")
+                    raise LLMClientError(f"Realtime API error: {message}")
+
+        if timeout_seconds is not None:
+            return await asyncio.wait_for(_inner(), timeout=timeout_seconds)
+        return await _inner()
 
     @property
     def circuit_breaker_stats(self) -> dict[str, Any]:
