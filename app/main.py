@@ -13,9 +13,11 @@ import structlog
 
 from app.api.v1 import router as v1_router
 from app.config import get_settings
+from app.docs.router import router as docs_router
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.prompts import load_prompts, registry
 from app.schemas import ErrorResponse
+from app.ui import router as ui_router
 
 # Configure structured logging
 structlog.configure(
@@ -170,4 +172,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 
 # Include routers
+# API routes must come before docs router to avoid being caught by catch-all
 app.include_router(v1_router)
+app.include_router(ui_router, prefix="", tags=["UI"], include_in_schema=False)
+app.include_router(docs_router, prefix="", tags=["documentation"], include_in_schema=False)
