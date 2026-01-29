@@ -436,8 +436,6 @@ class LLMClient:
                     # Best-effort close
                     with contextlib.suppress(Exception):
                         await ws.close()
-                    except Exception:
-                        pass
         except asyncio.TimeoutError as e:
             logger.error("Realtime classification timed out", error=str(e))
             raise LLMClientError("Realtime audio classification timed out") from e
