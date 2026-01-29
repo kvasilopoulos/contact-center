@@ -95,6 +95,7 @@ async def classify_message(
             processing_time_ms=result.processing_time_ms,
             prompt_version=result.prompt_version,
             prompt_variant=result.prompt_variant,
+            model=result.model,
         )
 
     except ClassificationError as e:

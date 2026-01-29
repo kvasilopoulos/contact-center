@@ -36,6 +36,7 @@ class LLMConfig:
     temperature: float = 0.0
     max_tokens: int = 500
     response_format: str = "json_object"
+    model: str = ""  # Empty string means use global default from settings
 
 
 @dataclass

@@ -22,7 +22,7 @@ class TestClassifierService:
         """Test classifying an informational message."""
         mock_llm_client.complete_with_template.return_value = (
             mock_classification_response_informational,
-            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active", "model": "gpt-4.1"},
         )
 
         result = await classifier_service.classify(informational_message)
@@ -45,7 +45,7 @@ class TestClassifierService:
         """Test classifying a service action message."""
         mock_llm_client.complete_with_template.return_value = (
             mock_classification_response_service_action,
-            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active", "model": "gpt-4.1"},
         )
 
         result = await classifier_service.classify(service_action_message)
@@ -64,7 +64,7 @@ class TestClassifierService:
         """Test classifying a safety compliance message."""
         mock_llm_client.complete_with_template.return_value = (
             mock_classification_response_safety,
-            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active", "model": "gpt-4.1"},
         )
 
         result = await classifier_service.classify(safety_compliance_message)
@@ -82,7 +82,7 @@ class TestClassifierService:
         """Test classification includes channel in prompt."""
         mock_llm_client.complete_with_template.return_value = (
             mock_classification_response_informational,
-            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active", "model": "gpt-4.1"},
         )
 
         await classifier_service.classify("Test message", channel="voice")
@@ -106,7 +106,7 @@ class TestClassifierService:
                 "confidence": 0.9,
                 "reasoning": "Test",
             },
-            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active", "model": "gpt-4.1"},
         )
 
         result = await classifier_service.classify("Test message")
@@ -122,7 +122,7 @@ class TestClassifierService:
         mock_llm_client: MagicMock,
     ) -> None:
         """Test that confidence is clamped to valid range."""
-        metadata = {"prompt_id": "classification", "version": "1.0.0", "variant": "active"}
+        metadata = {"prompt_id": "classification", "version": "1.0.0", "variant": "active", "model": "gpt-4"}
 
         # Test above 1.0
         mock_llm_client.complete_with_template.return_value = (
@@ -197,7 +197,7 @@ class TestClassifierService:
         """Test that processing time is tracked."""
         mock_llm_client.complete_with_template.return_value = (
             mock_classification_response_informational,
-            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active", "model": "gpt-4.1"},
         )
 
         result = await classifier_service.classify("Test message")

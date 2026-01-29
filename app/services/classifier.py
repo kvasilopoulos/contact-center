@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 import time
-from typing import Any, Literal
+from typing import Literal
 
 import structlog
 
@@ -24,6 +24,7 @@ class ClassificationResult:
     processing_time_ms: float
     prompt_version: str = ""
     prompt_variant: str = ""
+    model: str = ""
 
 
 class ClassifierService:
@@ -102,6 +103,7 @@ class ClassifierService:
                 processing_time_ms=round(processing_time_ms, 2),
                 prompt_version=prompt_metadata.get("version"),
                 prompt_variant=prompt_metadata.get("variant"),
+                model=prompt_metadata.get("model"),
             )
 
             return ClassificationResult(
@@ -111,6 +113,7 @@ class ClassifierService:
                 processing_time_ms=processing_time_ms,
                 prompt_version=prompt_metadata.get("version", ""),
                 prompt_variant=prompt_metadata.get("variant", ""),
+                model=prompt_metadata.get("model", ""),
             )
 
         except LLMClientError as e:

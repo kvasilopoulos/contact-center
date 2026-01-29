@@ -45,6 +45,7 @@ parameters:
     description: Description of what this variable is
 
 llm_config:
+  model: gpt-4                # Optional: LLM model to use (defaults to global setting)
   temperature: 0.0
   max_tokens: 500
   response_format: json_object
@@ -95,6 +96,25 @@ experiments:
       - accuracy
       - latency
       - confidence_score
+    start_date: 2024-01-20
+    end_date: 2024-02-20
+
+  - id: model_comparison
+    name: "GPT-4 vs GPT-4o-mini"
+    active: true
+    variants:
+      - name: expensive
+        version: 1.0.0
+        model: gpt-4              # Model override
+        traffic: 0.2
+      - name: cheap
+        version: 1.0.0
+        model: gpt-4o-mini        # Model override
+        traffic: 0.8
+    metrics:
+      - accuracy
+      - cost
+      - latency
     start_date: 2024-01-20
     end_date: 2024-02-20
 ```

@@ -128,6 +128,10 @@ class ClassificationResponse(BaseModel):
         default="",
         description="Variant of the prompt (for A/B testing)",
     )
+    model: str = Field(
+        default="",
+        description="LLM model used for classification",
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -148,6 +152,7 @@ class ClassificationResponse(BaseModel):
                     "processing_time_ms": 245.5,
                     "prompt_version": "1.0.0",
                     "prompt_variant": "active",
+                    "model": "gpt-4.1",
                 }
             ]
         }

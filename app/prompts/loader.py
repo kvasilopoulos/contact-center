@@ -83,6 +83,7 @@ def parse_prompt_template(data: dict[str, Any], file_path: Path) -> PromptTempla
             temperature=float(llm_config_data.get("temperature", 0.0)),
             max_tokens=int(llm_config_data.get("max_tokens", 500)),
             response_format=llm_config_data.get("response_format", "json_object"),
+            model=llm_config_data.get("model", ""),
         )
 
         # Parse metadata
@@ -130,6 +131,7 @@ def parse_experiments(data: dict[str, Any], file_path: Path) -> list[ExperimentC
                         name=var_data.get("name", ""),
                         version=str(var_data.get("version", "")),
                         traffic=float(var_data.get("traffic", 0.0)),
+                        model=var_data.get("model", ""),
                     )
                 )
 

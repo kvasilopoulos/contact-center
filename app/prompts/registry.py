@@ -18,6 +18,7 @@ class ExperimentVariant:
     name: str
     version: str
     traffic: float  # Percentage of traffic (0.0 to 1.0)
+    model: str = ""  # Optional model override for this variant
 
 
 @dataclass
