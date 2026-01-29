@@ -20,7 +20,10 @@ class TestClassifierService:
         mock_classification_response_informational: dict,
     ) -> None:
         """Test classifying an informational message."""
-        mock_llm_client.complete.return_value = mock_classification_response_informational
+        mock_llm_client.complete_with_template.return_value = (
+            mock_classification_response_informational,
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+        )
 
         result = await classifier_service.classify(informational_message)
 
@@ -28,6 +31,8 @@ class TestClassifierService:
         assert result.category == "informational"
         assert result.confidence == 0.95
         assert "refund policy" in result.reasoning.lower()
+        assert result.prompt_version == "1.0.0"
+        assert result.prompt_variant == "active"
 
     @pytest.mark.asyncio
     async def test_classify_service_action(
@@ -38,7 +43,10 @@ class TestClassifierService:
         mock_classification_response_service_action: dict,
     ) -> None:
         """Test classifying a service action message."""
-        mock_llm_client.complete.return_value = mock_classification_response_service_action
+        mock_llm_client.complete_with_template.return_value = (
+            mock_classification_response_service_action,
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+        )
 
         result = await classifier_service.classify(service_action_message)
 
@@ -54,7 +62,10 @@ class TestClassifierService:
         mock_classification_response_safety: dict,
     ) -> None:
         """Test classifying a safety compliance message."""
-        mock_llm_client.complete.return_value = mock_classification_response_safety
+        mock_llm_client.complete_with_template.return_value = (
+            mock_classification_response_safety,
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+        )
 
         result = await classifier_service.classify(safety_compliance_message)
 
@@ -69,14 +80,18 @@ class TestClassifierService:
         mock_classification_response_informational: dict,
     ) -> None:
         """Test classification includes channel in prompt."""
-        mock_llm_client.complete.return_value = mock_classification_response_informational
+        mock_llm_client.complete_with_template.return_value = (
+            mock_classification_response_informational,
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+        )
 
         await classifier_service.classify("Test message", channel="voice")
 
-        # Verify channel was included in the prompt
-        call_args = mock_llm_client.complete.call_args
-        user_prompt = call_args.kwargs.get("user_prompt", call_args.args[1] if len(call_args.args) > 1 else "")
-        assert "VOICE" in user_prompt.upper()
+        # Verify the template was called with correct variables
+        call_args = mock_llm_client.complete_with_template.call_args
+        variables = call_args.kwargs.get("variables", {})
+        assert variables.get("channel") == "voice"
+        assert variables.get("message") == "Test message"
 
     @pytest.mark.asyncio
     async def test_classify_invalid_category_defaults(
@@ -85,11 +100,14 @@ class TestClassifierService:
         mock_llm_client: MagicMock,
     ) -> None:
         """Test that invalid category from LLM defaults to service_action."""
-        mock_llm_client.complete.return_value = {
-            "category": "invalid_category",
-            "confidence": 0.9,
-            "reasoning": "Test",
-        }
+        mock_llm_client.complete_with_template.return_value = (
+            {
+                "category": "invalid_category",
+                "confidence": 0.9,
+                "reasoning": "Test",
+            },
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+        )
 
         result = await classifier_service.classify("Test message")
 
@@ -104,21 +122,29 @@ class TestClassifierService:
         mock_llm_client: MagicMock,
     ) -> None:
         """Test that confidence is clamped to valid range."""
+        metadata = {"prompt_id": "classification", "version": "1.0.0", "variant": "active"}
+
         # Test above 1.0
-        mock_llm_client.complete.return_value = {
-            "category": "informational",
-            "confidence": 1.5,
-            "reasoning": "Test",
-        }
+        mock_llm_client.complete_with_template.return_value = (
+            {
+                "category": "informational",
+                "confidence": 1.5,
+                "reasoning": "Test",
+            },
+            metadata,
+        )
         result = await classifier_service.classify("Test")
         assert result.confidence == 1.0
 
         # Test below 0.0
-        mock_llm_client.complete.return_value = {
-            "category": "informational",
-            "confidence": -0.5,
-            "reasoning": "Test",
-        }
+        mock_llm_client.complete_with_template.return_value = (
+            {
+                "category": "informational",
+                "confidence": -0.5,
+                "reasoning": "Test",
+            },
+            metadata,
+        )
         result = await classifier_service.classify("Test")
         assert result.confidence == 0.0
 
@@ -129,7 +155,7 @@ class TestClassifierService:
         mock_llm_client: MagicMock,
     ) -> None:
         """Test that LLM errors are properly propagated."""
-        mock_llm_client.complete.side_effect = LLMClientError("API error")
+        mock_llm_client.complete_with_template.side_effect = LLMClientError("API error")
 
         with pytest.raises(ClassificationError) as exc_info:
             await classifier_service.classify("Test message")
@@ -169,7 +195,10 @@ class TestClassifierService:
         mock_classification_response_informational: dict,
     ) -> None:
         """Test that processing time is tracked."""
-        mock_llm_client.complete.return_value = mock_classification_response_informational
+        mock_llm_client.complete_with_template.return_value = (
+            mock_classification_response_informational,
+            {"prompt_id": "classification", "version": "1.0.0", "variant": "active"},
+        )
 
         result = await classifier_service.classify("Test message")
 

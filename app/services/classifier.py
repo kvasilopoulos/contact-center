@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 import time
-from typing import Literal
+from typing import Any, Literal
 
 import structlog
 
@@ -13,47 +13,6 @@ logger = structlog.get_logger(__name__)
 
 CategoryType = Literal["informational", "service_action", "safety_compliance"]
 
-CLASSIFICATION_SYSTEM_PROMPT = """You are a customer service classifier for a pharmacy/healthcare contact center.
-
-Your task is to classify customer messages into exactly ONE of three categories.
-
-CATEGORIES:
-
-1. **informational** - Questions seeking information about:
-   - Policies (refund, shipping, privacy, etc.)
-   - Product details or availability
-   - General inquiries and FAQs
-   - Account information requests
-   - Store hours, locations, contact info
-
-2. **service_action** - Requests that require taking an action:
-   - Opening support tickets
-   - Tracking or modifying orders
-   - Processing refunds or returns
-   - Account changes (password reset, profile updates)
-   - Scheduling appointments
-   - Cancellations
-
-3. **safety_compliance** - Health and safety concerns that require special handling:
-   - Adverse reactions to medications
-   - Side effects or allergic reactions
-   - Medical emergencies
-   - Product quality or contamination concerns
-   - Drug interactions or safety questions
-   - Any message mentioning physical symptoms after using a product
-
-IMPORTANT RULES:
-- safety_compliance takes priority if ANY health/safety concern is mentioned
-- Be conservative: if unsure between categories, prefer lower confidence
-- Consider the primary intent of the message
-
-Respond ONLY with a JSON object in this exact format:
-{
-    "category": "<category_name>",
-    "confidence": <0.0-1.0>,
-    "reasoning": "<brief explanation of why this category was chosen>"
-}"""
-
 
 @dataclass
 class ClassificationResult:
@@ -63,6 +22,8 @@ class ClassificationResult:
     confidence: float
     reasoning: str
     processing_time_ms: float
+    prompt_version: str = ""
+    prompt_variant: str = ""
 
 
 class ClassifierService:
@@ -82,30 +43,29 @@ class ClassifierService:
         self,
         message: str,
         channel: str = "chat",
+        experiment_id: str | None = None,
     ) -> ClassificationResult:
         """Classify a customer message into a category.
 
         Args:
             message: The customer message to classify.
             channel: The communication channel (chat, voice, mail).
+            experiment_id: Optional experiment ID for A/B testing.
 
         Returns:
-            ClassificationResult with category, confidence, and reasoning.
+            ClassificationResult with category, confidence, reasoning, and prompt metadata.
 
         Raises:
             ClassificationError: If classification fails.
         """
         start_time = time.perf_counter()
 
-        # Build the user prompt with context
-        user_prompt = f"CHANNEL: {channel}\n\nCUSTOMER MESSAGE:\n{message}"
-
         try:
-            result = await self.llm_client.complete(
-                system_prompt=CLASSIFICATION_SYSTEM_PROMPT,
-                user_prompt=user_prompt,
-                temperature=0.0,  # Deterministic for classification
-                max_tokens=200,
+            # Use prompt template from registry
+            result, prompt_metadata = await self.llm_client.complete_with_template(
+                template_id="classification",
+                variables={"channel": channel, "message": message},
+                experiment_id=experiment_id,
             )
 
             processing_time_ms = (time.perf_counter() - start_time) * 1000
@@ -122,6 +82,7 @@ class ClassifierService:
                     "Invalid category returned by LLM",
                     category=category,
                     valid_categories=list(valid_categories),
+                    prompt_version=prompt_metadata.get("version"),
                 )
                 # Default to service_action with low confidence for unknown categories
                 category = "service_action"
@@ -139,6 +100,8 @@ class ClassifierService:
                 confidence=confidence,
                 channel=channel,
                 processing_time_ms=round(processing_time_ms, 2),
+                prompt_version=prompt_metadata.get("version"),
+                prompt_variant=prompt_metadata.get("variant"),
             )
 
             return ClassificationResult(
@@ -146,6 +109,8 @@ class ClassifierService:
                 confidence=confidence,
                 reasoning=reasoning,
                 processing_time_ms=processing_time_ms,
+                prompt_version=prompt_metadata.get("version", ""),
+                prompt_variant=prompt_metadata.get("variant", ""),
             )
 
         except LLMClientError as e:

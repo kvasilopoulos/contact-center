@@ -120,6 +120,14 @@ class ClassificationResponse(BaseModel):
         ...,
         description="Time taken to process the request in milliseconds",
     )
+    prompt_version: str = Field(
+        default="",
+        description="Version of the prompt template used for classification",
+    )
+    prompt_variant: str = Field(
+        default="",
+        description="Variant of the prompt (for A/B testing)",
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -138,6 +146,8 @@ class ClassificationResponse(BaseModel):
                         "external_system": None,
                     },
                     "processing_time_ms": 245.5,
+                    "prompt_version": "1.0.0",
+                    "prompt_variant": "active",
                 }
             ]
         }

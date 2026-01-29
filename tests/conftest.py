@@ -1,6 +1,7 @@
 """Pytest configuration and shared fixtures."""
 
 from collections.abc import AsyncGenerator, Generator
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
@@ -9,8 +10,42 @@ import pytest
 
 from app.config import Settings, get_settings
 from app.main import app
+from app.prompts import get_registry, load_prompts
+from app.prompts.template import LLMConfig, PromptMetadata, PromptParameter, PromptTemplate
 from app.services.classifier import ClassifierService
 from app.services.llm_client import LLMClient
+
+
+@pytest.fixture(autouse=True)
+def setup_test_prompts() -> None:
+    """Setup test prompts before each test."""
+    # Clear the registry
+    registry = get_registry()
+    registry._templates.clear()
+    registry._active_versions.clear()
+    registry._experiments.clear()
+
+    # Try to load prompts from project root
+    try:
+        project_root = Path(__file__).parent.parent
+        prompts_dir = project_root / "prompts"
+        if prompts_dir.exists():
+            load_prompts(prompts_dir)
+    except Exception:
+        # If loading fails, create a minimal test prompt
+        test_prompt = PromptTemplate(
+            id="classification",
+            version="1.0.0",
+            system_prompt="You are a test classifier.",
+            user_prompt_template="Channel: {{channel}}\nMessage: {{message}}",
+            parameters=[
+                PromptParameter(name="channel", type="string", description="Channel"),
+                PromptParameter(name="message", type="string", description="Message"),
+            ],
+            llm_config=LLMConfig(temperature=0.0, max_tokens=200),
+            metadata=PromptMetadata(author="test", description="Test prompt"),
+        )
+        registry.register(test_prompt)
 
 
 @pytest.fixture
@@ -30,6 +65,7 @@ def mock_llm_client(test_settings: Settings) -> MagicMock:  # noqa: ARG001
     """Create a mock LLM client."""
     mock = MagicMock(spec=LLMClient)
     mock.complete = AsyncMock()
+    mock.complete_with_template = AsyncMock()
     mock.health_check = AsyncMock(return_value=True)
     mock.close = AsyncMock()
     return mock

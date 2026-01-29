@@ -14,6 +14,7 @@ import structlog
 from app.api.v1 import router as v1_router
 from app.config import get_settings
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.prompts import load_prompts, registry
 from app.schemas import ErrorResponse
 
 # Configure structured logging
@@ -46,6 +47,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         version=settings.app_version,
         environment=settings.environment,
     )
+
+    # Load prompt templates from YAML files
+    try:
+        load_prompts()
+        logger.info(
+            "Prompts loaded successfully",
+            registry_stats=registry.get_stats(),
+            available_prompts=registry.list_prompts(),
+        )
+    except FileNotFoundError as e:
+        logger.error(
+            "Failed to load prompts - prompts directory not found",
+            error=str(e),
+            hint="Create a 'prompts/' directory at project root with YAML prompt files",
+        )
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to load prompts",
+            error=str(e),
+            exc_info=True,
+        )
+        raise
+
     yield
     logger.info("Shutting down application")
 
