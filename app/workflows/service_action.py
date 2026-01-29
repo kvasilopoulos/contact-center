@@ -216,7 +216,9 @@ class ServiceActionWorkflow(BaseWorkflow):
         )
 
     async def _handle_account_update(
-        self, message: str, metadata: dict[str, Any]  # noqa: ARG002
+        self,
+        message: str,
+        metadata: dict[str, Any],  # noqa: ARG002
     ) -> WorkflowResult:
         """Handle account update requests."""
         update_type = self._detect_update_type(message)
@@ -236,7 +238,9 @@ class ServiceActionWorkflow(BaseWorkflow):
         )
 
     async def _handle_unknown_action(
-        self, message: str, metadata: dict[str, Any]  # noqa: ARG002
+        self,
+        message: str,
+        metadata: dict[str, Any],  # noqa: ARG002
     ) -> WorkflowResult:
         """Handle unknown service action requests."""
         return WorkflowResult(

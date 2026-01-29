@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Center - AI Classification</title>
+    <style>
+        :root {
+            --background: #ffffff;
+            --foreground: #09090b;
+            --card: #ffffff;
+            --card-foreground: #09090b;
+            --muted: #f4f4f5;
+            --muted-foreground: #71717a;
+            --border: #e4e4e7;
+            --primary: #18181b;
+            --primary-foreground: #fafafa;
+            --accent: #f4f4f5;
+            --accent-foreground: #18181b;
+            --destructive: #ef4444;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --ring: #18181b;
+            --radius: 0.5rem;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            min-height: 100vh;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--muted-foreground);
+            font-size: 1rem;
+        }
+
+        /* Input Card */
+        .input-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 1.5rem;
+            background: var(--muted);
+            padding: 0.25rem;
+            border-radius: var(--radius);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 0.625rem 1rem;
+            border: none;
+            background: transparent;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--muted-foreground);
+            cursor: pointer;
+            border-radius: calc(var(--radius) - 2px);
+            transition: all 150ms ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .tab:hover {
+            color: var(--foreground);
+        }
+
+        .tab.active {
+            background: var(--background);
+            color: var(--foreground);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .tab svg {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Text Input */
+        .textarea-wrapper {
+            position: relative;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 0.875rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.9375rem;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 150ms ease, box-shadow 150ms ease;
+            background: var(--background);
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--ring);
+            box-shadow: 0 0 0 3px rgba(24, 24, 27, 0.1);
+        }
+
+        textarea::placeholder {
+            color: var(--muted-foreground);
+        }
+
+        .char-count {
+            position: absolute;
+            bottom: 0.5rem;
+            right: 0.75rem;
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+        }
+
+        /* Example Prompts */
+        .examples-section {
+            margin-top: 1rem;
+        }
+
+        .examples-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--muted-foreground);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+
+        .examples-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .example-btn {
+            padding: 0.75rem;
+            background: var(--muted);
+            border: 1px solid transparent;
+            border-radius: var(--radius);
+            font-size: 0.8125rem;
+            color: var(--foreground);
+            text-align: left;
+            cursor: pointer;
+            transition: all 150ms ease;
+            line-height: 1.4;
+        }
+
+        .example-btn:hover {
+            background: var(--accent);
+            border-color: var(--border);
+        }
+
+        /* Audio Recording */
+        .audio-section {
+            text-align: center;
+            padding: 2rem 1rem;
+        }
+
+        .record-btn {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 3px solid var(--border);
+            background: var(--background);
+            cursor: pointer;
+            transition: all 200ms ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            position: relative;
+        }
+
+        .record-btn:hover {
+            border-color: var(--foreground);
+            transform: scale(1.02);
+        }
+
+        .record-btn.recording {
+            border-color: var(--destructive);
+            animation: pulse 1.5s infinite;
+        }
+
+        .record-btn svg {
+            width: 36px;
+            height: 36px;
+            color: var(--muted-foreground);
+            transition: color 150ms ease;
+        }
+
+        .record-btn:hover svg {
+            color: var(--foreground);
+        }
+
+        .record-btn.recording svg {
+            color: var(--destructive);
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 15px rgba(239, 68, 68, 0);
+            }
+        }
+
+        .recording-status {
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            margin-bottom: 0.5rem;
+        }
+
+        .recording-status.active {
+            color: var(--destructive);
+            font-weight: 500;
+        }
+
+        .recording-timer {
+            font-size: 1.5rem;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            color: var(--foreground);
+        }
+
+        .audio-preview {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: var(--muted);
+            border-radius: var(--radius);
+            display: none;
+        }
+
+        .audio-preview.visible {
+            display: block;
+        }
+
+        .audio-preview audio {
+            width: 100%;
+            height: 40px;
+        }
+
+        .audio-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            justify-content: center;
+        }
+
+        /* Submit Button */
+        .submit-section {
+            margin-top: 1.5rem;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 0.875rem 1.5rem;
+            background: var(--primary);
+            color: var(--primary-foreground);
+            border: none;
+            border-radius: var(--radius);
+            font-size: 0.9375rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 150ms ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .submit-btn:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .submit-btn svg {
+            width: 1.125rem;
+            height: 1.125rem;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            width: 1.125rem;
+            height: 1.125rem;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Secondary Button */
+        .btn-secondary {
+            padding: 0.5rem 1rem;
+            background: var(--background);
+            color: var(--foreground);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.8125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 150ms ease;
+        }
+
+        .btn-secondary:hover {
+            background: var(--muted);
+        }
+
+        /* Results Section */
+        .results-section {
+            display: none;
+        }
+
+        .results-section.visible {
+            display: block;
+        }
+
+        .result-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .result-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .result-title {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .result-badge {
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .badge-informational {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-service_action {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-safety_compliance {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .result-body {
+            padding: 1.5rem;
+        }
+
+        .result-grid {
+            display: grid;
+            gap: 1.25rem;
+        }
+
+        .result-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.375rem;
+        }
+
+        .result-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--muted-foreground);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .result-value {
+            font-size: 0.9375rem;
+            color: var(--foreground);
+        }
+
+        /* Confidence Bar */
+        .confidence-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .confidence-bar {
+            flex: 1;
+            height: 8px;
+            background: var(--muted);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .confidence-fill.medium {
+            background: var(--warning);
+        }
+
+        .confidence-fill.low {
+            background: var(--destructive);
+        }
+
+        .confidence-value {
+            font-size: 0.875rem;
+            font-weight: 600;
+            min-width: 45px;
+            text-align: right;
+        }
+
+        /* Next Steps Card */
+        .next-step-card {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--muted);
+            border-radius: var(--radius);
+        }
+
+        .next-step-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .next-step-header svg {
+            width: 1.125rem;
+            height: 1.125rem;
+            color: var(--primary);
+        }
+
+        .next-step-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .next-step-description {
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            margin-bottom: 0.75rem;
+        }
+
+        .next-step-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .meta-tag {
+            padding: 0.25rem 0.625rem;
+            background: var(--background);
+            border: 1px solid var(--border);
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+        }
+
+        .meta-tag.priority-urgent {
+            border-color: var(--destructive);
+            color: var(--destructive);
+        }
+
+        .meta-tag.priority-high {
+            border-color: var(--warning);
+            color: #b45309;
+        }
+
+        .meta-tag.human-review {
+            border-color: #8b5cf6;
+            color: #6d28d9;
+        }
+
+        /* Processing Info */
+        .processing-info {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+        }
+
+        .processing-item {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+        }
+
+        .processing-item span {
+            color: var(--foreground);
+            font-weight: 500;
+        }
+
+        /* Reset Button */
+        .reset-section {
+            margin-top: 1.5rem;
+            text-align: center;
+        }
+
+        .reset-btn {
+            padding: 0.625rem 1.5rem;
+            background: transparent;
+            color: var(--muted-foreground);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 150ms ease;
+        }
+
+        .reset-btn:hover {
+            background: var(--muted);
+            color: var(--foreground);
+        }
+
+        /* Error State */
+        .error-card {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: var(--radius);
+            padding: 1rem 1.25rem;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .error-card.visible {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+        }
+
+        .error-card svg {
+            width: 1.25rem;
+            height: 1.25rem;
+            color: var(--destructive);
+            flex-shrink: 0;
+            margin-top: 0.125rem;
+        }
+
+        .error-content h4 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #991b1b;
+            margin-bottom: 0.25rem;
+        }
+
+        .error-content p {
+            font-size: 0.8125rem;
+            color: #b91c1c;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .container {
+                padding: 1.5rem 1rem;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .examples-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .processing-info {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>Customer Message Classifier</h1>
+            <p>Type your message or record audio to get an AI-powered classification</p>
+        </header>
+
+        <!-- Input Section -->
+        <div class="input-card" id="inputSection">
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" data-tab="text" onclick="switchTab('text')">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 6.1H3"></path>
+                        <path d="M21 12.1H3"></path>
+                        <path d="M15.1 18H3"></path>
+                    </svg>
+                    Text
+                </button>
+                <button class="tab" data-tab="audio" onclick="switchTab('audio')">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" x2="12" y1="19" y2="22"></line>
+                    </svg>
+                    Voice
+                </button>
+            </div>
+
+            <!-- Text Tab Content -->
+            <div class="tab-content active" id="textTab">
+                <div class="textarea-wrapper">
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="Enter your customer message here..."
+                        maxlength="5000"
+                        oninput="updateCharCount()"
+                    ></textarea>
+                    <span class="char-count"><span id="charCount">0</span> / 5000</span>
+                </div>
+
+                <div class="examples-section">
+                    <div class="examples-label">Try an example</div>
+                    <div class="examples-grid">
+                        <button class="example-btn" onclick="useExample(this)">
+                            What is your refund policy for prescription products?
+                        </button>
+                        <button class="example-btn" onclick="useExample(this)">
+                            I need to cancel my order #12345 and get a refund immediately.
+                        </button>
+                        <button class="example-btn" onclick="useExample(this)">
+                            I experienced severe dizziness after taking the medication yesterday.
+                        </button>
+                        <button class="example-btn" onclick="useExample(this)">
+                            Can you tell me the store hours for the downtown location?
+                        </button>
+                    </div>
+                </div>
+
+                <div class="submit-section">
+                    <button class="submit-btn" id="submitTextBtn" onclick="submitText()" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m22 2-7 20-4-9-9-4Z"></path>
+                            <path d="M22 2 11 13"></path>
+                        </svg>
+                        Classify Message
+                    </button>
+                </div>
+            </div>
+
+            <!-- Audio Tab Content -->
+            <div class="tab-content" id="audioTab">
+                <div class="audio-section">
+                    <button class="record-btn" id="recordBtn" onclick="toggleRecording()">
+                        <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" x2="12" y1="19" y2="22"></line>
+                        </svg>
+                        <svg id="stopIcon" style="display: none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+                        </svg>
+                    </button>
+                    <p class="recording-status" id="recordingStatus">Click to start recording</p>
+                    <p class="recording-timer" id="recordingTimer">0:00</p>
+
+                    <div class="audio-preview" id="audioPreview">
+                        <audio id="audioPlayback" controls></audio>
+                        <div class="audio-actions">
+                            <button class="btn-secondary" onclick="discardRecording()">Discard</button>
+                            <button class="submit-btn" style="width: auto; padding: 0.5rem 1.5rem;" id="submitAudioBtn" onclick="submitAudio()">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="m22 2-7 20-4-9-9-4Z"></path>
+                                    <path d="M22 2 11 13"></path>
+                                </svg>
+                                Classify Voice
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error Display -->
+            <div class="error-card" id="errorCard">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" x2="12" y1="8" y2="12"></line>
+                    <line x1="12" x2="12.01" y1="16" y2="16"></line>
+                </svg>
+                <div class="error-content">
+                    <h4>Classification Failed</h4>
+                    <p id="errorMessage">An error occurred. Please try again.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section" id="resultsSection">
+            <div class="result-card">
+                <div class="result-header">
+                    <span class="result-title">Classification Result</span>
+                    <span class="result-badge" id="categoryBadge">informational</span>
+                </div>
+                <div class="result-body">
+                    <div class="result-grid">
+                        <div class="result-item">
+                            <span class="result-label">Confidence Score</span>
+                            <div class="confidence-wrapper">
+                                <div class="confidence-bar">
+                                    <div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
+                                </div>
+                                <span class="confidence-value" id="confidenceValue">0%</span>
+                            </div>
+                        </div>
+
+                        <div class="result-item">
+                            <span class="result-label">Decision Reasoning</span>
+                            <p class="result-value" id="decisionPath">-</p>
+                        </div>
+
+                        <div class="next-step-card">
+                            <div class="next-step-header">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M5 12h14"></path>
+                                    <path d="m12 5 7 7-7 7"></path>
+                                </svg>
+                                <span class="next-step-title" id="nextStepAction">Next Step</span>
+                            </div>
+                            <p class="next-step-description" id="nextStepDescription">-</p>
+                            <div class="next-step-meta" id="nextStepMeta"></div>
+                        </div>
+                    </div>
+
+                    <div class="processing-info">
+                        <div class="processing-item">Processing Time: <span id="processingTime">-</span></div>
+                        <div class="processing-item">Model: <span id="modelUsed">-</span></div>
+                        <div class="processing-item">Prompt Version: <span id="promptVersion">-</span></div>
+                        <div class="processing-item">Request ID: <span id="requestId">-</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="reset-section">
+                <button class="reset-btn" onclick="resetInterface()">
+                    Classify Another Message
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let audioBlob = null;
+        let recordingInterval = null;
+        let recordingSeconds = 0;
+        let isRecording = false;
+        let mediaStream = null;
+
+        // Tab Switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+            document.getElementById(`${tab}Tab`).classList.add('active');
+            
+            hideError();
+            
+            // Stop any ongoing recording when switching tabs
+            if (isRecording) {
+                stopRecording();
+            }
+        }
+
+        // Text Input
+        function updateCharCount() {
+            const textarea = document.getElementById('messageInput');
+            const count = textarea.value.length;
+            document.getElementById('charCount').textContent = count;
+            document.getElementById('submitTextBtn').disabled = count === 0;
+        }
+
+        function useExample(btn) {
+            const textarea = document.getElementById('messageInput');
+            textarea.value = btn.textContent.trim();
+            updateCharCount();
+            textarea.focus();
+        }
+
+        // Stop timer helper
+        function stopTimer() {
+            if (recordingInterval !== null) {
+                clearInterval(recordingInterval);
+                recordingInterval = null;
+            }
+        }
+
+        // Stop recording helper
+        function stopRecording() {
+            stopTimer();
+            
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            
+            isRecording = false;
+            
+            // Update UI
+            document.getElementById('recordBtn').classList.remove('recording');
+            document.getElementById('micIcon').style.display = 'block';
+            document.getElementById('stopIcon').style.display = 'none';
+            document.getElementById('recordingStatus').textContent = 'Recording complete';
+            document.getElementById('recordingStatus').classList.remove('active');
+        }
+
+        // Audio Recording
+        async function toggleRecording() {
+            if (!isRecording) {
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(mediaStream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = (e) => {
+                        if (e.data.size > 0) {
+                            audioChunks.push(e.data);
+                        }
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        // Stop timer again in case it wasn't stopped
+                        stopTimer();
+                        
+                        if (audioChunks.length > 0) {
+                            audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                            const audioUrl = URL.createObjectURL(audioBlob);
+                            document.getElementById('audioPlayback').src = audioUrl;
+                            document.getElementById('audioPreview').classList.add('visible');
+                        }
+                        
+                        // Stop all tracks
+                        if (mediaStream) {
+                            mediaStream.getTracks().forEach(track => track.stop());
+                            mediaStream = null;
+                        }
+                    };
+
+                    mediaRecorder.onerror = (e) => {
+                        console.error('MediaRecorder error:', e);
+                        stopRecording();
+                        showError('Recording error occurred. Please try again.');
+                    };
+
+                    mediaRecorder.start(100); // Collect data every 100ms for better reliability
+                    isRecording = true;
+                    
+                    // Update UI
+                    document.getElementById('recordBtn').classList.add('recording');
+                    document.getElementById('micIcon').style.display = 'none';
+                    document.getElementById('stopIcon').style.display = 'block';
+                    document.getElementById('recordingStatus').textContent = 'Recording...';
+                    document.getElementById('recordingStatus').classList.add('active');
+                    
+                    // Start timer - reset first
+                    stopTimer();
+                    recordingSeconds = 0;
+                    updateTimer();
+                    recordingInterval = setInterval(() => {
+                        if (isRecording) {
+                            recordingSeconds++;
+                            updateTimer();
+                        } else {
+                            stopTimer();
+                        }
+                    }, 1000);
+
+                } catch (err) {
+                    console.error('Microphone error:', err);
+                    showError('Microphone access denied. Please allow microphone access to record audio.');
+                }
+            } else {
+                stopRecording();
+            }
+        }
+
+        function updateTimer() {
+            const minutes = Math.floor(recordingSeconds / 60);
+            const seconds = recordingSeconds % 60;
+            document.getElementById('recordingTimer').textContent = 
+                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function discardRecording() {
+            stopTimer();
+            audioBlob = null;
+            audioChunks = [];
+            recordingSeconds = 0;
+            document.getElementById('audioPreview').classList.remove('visible');
+            document.getElementById('recordingStatus').textContent = 'Click to start recording';
+            document.getElementById('recordingTimer').textContent = '0:00';
+        }
+
+        // Submit Functions
+        async function submitText() {
+            const message = document.getElementById('messageInput').value.trim();
+            if (!message) return;
+
+            setLoading(true, 'submitTextBtn');
+            hideError();
+
+            try {
+                const response = await fetch('/api/v1/classify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        channel: 'chat'
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail?.message || 'Classification failed');
+                }
+
+                const result = await response.json();
+                displayResults(result);
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                setLoading(false, 'submitTextBtn');
+            }
+        }
+
+        async function submitAudio() {
+            if (!audioBlob) return;
+
+            setLoading(true, 'submitAudioBtn');
+            hideError();
+
+            try {
+                const formData = new FormData();
+                formData.append('audio_file', audioBlob, 'recording.wav');
+
+                const response = await fetch('/api/v1/classify/voice', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail?.message || 'Voice classification failed');
+                }
+
+                const result = await response.json();
+                displayResults(result);
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                setLoading(false, 'submitAudioBtn');
+            }
+        }
+
+        // UI Helpers
+        function setLoading(loading, btnId) {
+            const btn = document.getElementById(btnId);
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '<div class="spinner"></div> Processing...';
+            } else {
+                btn.disabled = false;
+                if (btnId === 'submitTextBtn') {
+                    btn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m22 2-7 20-4-9-9-4Z"></path>
+                            <path d="M22 2 11 13"></path>
+                        </svg>
+                        Classify Message
+                    `;
+                    updateCharCount();
+                } else {
+                    btn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m22 2-7 20-4-9-9-4Z"></path>
+                            <path d="M22 2 11 13"></path>
+                        </svg>
+                        Classify Voice
+                    `;
+                }
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorCard').classList.add('visible');
+        }
+
+        function hideError() {
+            document.getElementById('errorCard').classList.remove('visible');
+        }
+
+        function displayResults(result) {
+            // Hide input, show results
+            document.getElementById('inputSection').style.display = 'none';
+            document.getElementById('resultsSection').classList.add('visible');
+
+            // Category badge
+            const badge = document.getElementById('categoryBadge');
+            badge.textContent = result.category.replace('_', ' ');
+            badge.className = `result-badge badge-${result.category}`;
+
+            // Confidence
+            const confidence = Math.round(result.confidence * 100);
+            document.getElementById('confidenceValue').textContent = `${confidence}%`;
+            const fill = document.getElementById('confidenceFill');
+            fill.style.width = `${confidence}%`;
+            fill.className = 'confidence-fill';
+            if (confidence < 70) fill.classList.add('low');
+            else if (confidence < 85) fill.classList.add('medium');
+
+            // Decision path
+            document.getElementById('decisionPath').textContent = result.decision_path;
+
+            // Next step
+            document.getElementById('nextStepAction').textContent = 
+                result.next_step.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            document.getElementById('nextStepDescription').textContent = result.next_step.description;
+
+            // Meta tags
+            const metaContainer = document.getElementById('nextStepMeta');
+            metaContainer.innerHTML = '';
+            
+            const priorityTag = document.createElement('span');
+            priorityTag.className = `meta-tag priority-${result.next_step.priority}`;
+            priorityTag.textContent = `Priority: ${result.next_step.priority}`;
+            metaContainer.appendChild(priorityTag);
+
+            if (result.next_step.requires_human_review) {
+                const reviewTag = document.createElement('span');
+                reviewTag.className = 'meta-tag human-review';
+                reviewTag.textContent = 'Requires Human Review';
+                metaContainer.appendChild(reviewTag);
+            }
+
+            if (result.next_step.external_system) {
+                const systemTag = document.createElement('span');
+                systemTag.className = 'meta-tag';
+                systemTag.textContent = `System: ${result.next_step.external_system}`;
+                metaContainer.appendChild(systemTag);
+            }
+
+            // Processing info
+            document.getElementById('processingTime').textContent = `${result.processing_time_ms.toFixed(0)}ms`;
+            document.getElementById('modelUsed').textContent = result.model || '-';
+            document.getElementById('promptVersion').textContent = result.prompt_version || '-';
+            document.getElementById('requestId').textContent = result.request_id;
+        }
+
+        function resetInterface() {
+            // Stop any ongoing recording first
+            if (isRecording) {
+                stopRecording();
+            }
+            stopTimer();
+            
+            // Reset state
+            document.getElementById('messageInput').value = '';
+            updateCharCount();
+            discardRecording();
+            hideError();
+
+            // Show input, hide results
+            document.getElementById('inputSection').style.display = 'block';
+            document.getElementById('resultsSection').classList.remove('visible');
+
+            // Reset to text tab
+            switchTab('text');
+        }
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (isRecording) {
+                stopRecording();
+            }
+            stopTimer();
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            updateCharCount();
+        });
+    </script>
+</body>
+</html>

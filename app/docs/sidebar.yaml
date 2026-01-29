@@ -1,0 +1,28 @@
+# Documentation Sidebar Configuration
+# Add your documentation pages here. Content will be loaded based on these paths.
+# Use lowercase with hyphens for URLs
+
+sections:
+  - title: "Getting Started"
+    pages:
+      - title: "Quick Start"
+        path: "aws-quick-start"
+
+  - title: "Architecture"
+    pages:
+      - title: "System Architecture"
+        path: "architecture"
+      - title: "Evaluation Framework"
+        path: "evaluation"
+
+  - title: "Deployment"
+    pages:
+      - title: "AWS Deployment Guide"
+        path: "aws-deployment"
+      - title: "AWS Setup Summary"
+        path: "aws-setup-summary"
+
+  - title: "Development"
+    pages:
+      - title: "Implementation Plan"
+        path: "plan/implementation-plan"

@@ -1,9 +1,10 @@
 """Classification endpoint."""
 
+import json
 from typing import Any
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 import structlog
 
 from app.config import Settings, get_settings
@@ -109,6 +110,129 @@ async def classify_message(
             detail={
                 "error": "classification_failed",
                 "message": "Unable to classify message. Please try again later.",
+                "request_id": request_id,
+            },
+        ) from e
+
+
+@router.post(
+    "/classify/voice",
+    response_model=ClassificationResponse,
+    summary="Classify Customer Voice Message",
+    description=(
+        "Accept a voice recording, process it with the configured Realtime model, "
+        "and classify the resulting message into informational, service_action, or safety_compliance. "
+        "Returns the category, confidence score, decision path, and recommended next steps."
+    ),
+    responses={
+        200: {"description": "Successfully classified the voice message"},
+        400: {"description": "Invalid audio or metadata"},
+        422: {"description": "Validation error in request"},
+        500: {"description": "Classification failed"},
+        503: {"description": "LLM service unavailable"},
+    },
+)
+async def classify_voice_message(
+    request: Request,
+    audio_file: UploadFile = File(
+        ...,
+        description="Audio file containing the customer's voice message (WAV recommended).",
+    ),
+    metadata: str | None = File(
+        default=None,
+        description="Optional JSON-encoded metadata about the message context.",
+    ),
+    classifier: ClassifierService = Depends(get_classifier_service),
+) -> ClassificationResponse:
+    """Classify a customer voice message by sending audio to the Realtime model."""
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+
+    logger.info(
+        "Voice classification request received",
+        request_id=request_id,
+        filename=audio_file.filename,
+        content_type=audio_file.content_type,
+    )
+
+    # Parse optional metadata JSON
+    metadata_dict: dict[str, Any] = {}
+    if metadata:
+        try:
+            metadata_dict = json.loads(metadata)
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Invalid metadata JSON for voice classification",
+                request_id=request_id,
+                error=str(e),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "invalid_metadata",
+                    "message": "Metadata must be valid JSON.",
+                    "request_id": request_id,
+                },
+            ) from e
+
+    try:
+        # Read audio bytes
+        audio_bytes = await audio_file.read()
+        if not audio_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "empty_audio",
+                    "message": "Uploaded audio file is empty.",
+                    "request_id": request_id,
+                },
+            )
+
+        # Classify the audio (channel is always 'voice' here)
+        result = await classifier.classify_audio(
+            audio=audio_bytes,
+            channel="voice",
+        )
+
+        # Execute the appropriate workflow
+        workflow_result = await _execute_workflow(
+            category=result.category,
+            message="voice_message",  # We do not expose transcription; message is placeholder
+            confidence=result.confidence,
+            metadata=metadata_dict,
+        )
+
+        # Build the response
+        next_step = NextStepInfo(
+            action=workflow_result.action,
+            description=workflow_result.description,
+            priority=workflow_result.priority,
+            requires_human_review=classifier.requires_human_review(result.confidence),
+            external_system=workflow_result.external_system,
+        )
+
+        return ClassificationResponse(
+            request_id=request_id,
+            category=result.category,
+            confidence=result.confidence,
+            decision_path=result.reasoning,
+            next_step=next_step,
+            processing_time_ms=result.processing_time_ms,
+            prompt_version=result.prompt_version,
+            prompt_variant=result.prompt_variant,
+            model=result.model,
+        )
+
+    except ClassificationError as e:
+        logger.error(
+            "Voice classification failed",
+            request_id=request_id,
+            error=str(e),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error": "voice_classification_failed",
+                "message": "Unable to process voice message. Please try again later.",
                 "request_id": request_id,
             },
         ) from e

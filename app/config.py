@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     # Default speech model for audio transcription / speech tasks
     openai_speech_model: str = "gpt-4o-mini-transcribe"
+    # Realtime model for audio-based interactions (WebSocket API)
+    openai_realtime_model: str = "gpt-4o-realtime-preview"
     openai_timeout: float = 30.0
     openai_max_retries: int = 3
 

@@ -38,7 +38,7 @@ install-dev:
 
 # Run development server
 run:
-	uv run fastapi run
+	uv run fastapi dev
 
 # Testing
 test:

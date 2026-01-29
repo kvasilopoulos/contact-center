@@ -27,8 +27,7 @@ def get_prompts_directory() -> Path:
 
     if not prompts_dir.exists():
         raise FileNotFoundError(
-            f"Prompts directory not found at {prompts_dir}. "
-            f"Please create it at the project root."
+            f"Prompts directory not found at {prompts_dir}. Please create it at the project root."
         )
 
     return prompts_dir
