@@ -125,6 +125,85 @@ class ClassifierService:
             )
             raise ClassificationError(f"Failed to classify message: {e}") from e
 
+    async def classify_audio(
+        self,
+        audio: bytes,
+        channel: str = "voice",
+    ) -> ClassificationResult:
+        """Classify a customer voice message using the Realtime audio pathway.
+
+        Args:
+            audio: Raw audio bytes (expected to be WAV-encoded).
+            channel: The communication channel, defaults to \"voice\".
+
+        Returns:
+            ClassificationResult with category, confidence, reasoning, and metadata.
+
+        Raises:
+            ClassificationError: If classification fails.
+        """
+        start_time = time.perf_counter()
+
+        try:
+            # Call Realtime audio classification
+            result = await self.llm_client.classify_audio_realtime(
+                audio=audio,
+                channel=channel,
+            )
+
+            processing_time_ms = (time.perf_counter() - start_time) * 1000
+
+            # Validate and extract result
+            category = result.get("category", "").lower()
+            confidence = float(result.get("confidence", 0.0))
+            reasoning = result.get("reasoning", "No reasoning provided")
+
+            # Validate category
+            valid_categories = {"informational", "service_action", "safety_compliance"}
+            if category not in valid_categories:
+                logger.warning(
+                    "Invalid category returned by Realtime LLM",
+                    category=category,
+                    valid_categories=list(valid_categories),
+                )
+                # Default to service_action with low confidence for unknown categories
+                category = "service_action"
+                confidence = 0.3
+                reasoning = (
+                    f"Original category '{category}' was invalid, defaulting to service_action"
+                )
+
+            # Clamp confidence to valid range
+            confidence = max(0.0, min(1.0, confidence))
+
+            logger.info(
+                "Audio message classified",
+                category=category,
+                confidence=confidence,
+                channel=channel,
+                processing_time_ms=round(processing_time_ms, 2),
+                model=self.settings.openai_realtime_model,
+            )
+
+            return ClassificationResult(
+                category=category,
+                confidence=confidence,
+                reasoning=reasoning,
+                processing_time_ms=processing_time_ms,
+                prompt_version="",
+                prompt_variant="",
+                model=self.settings.openai_realtime_model,
+            )
+
+        except LLMClientError as e:
+            processing_time_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                "Realtime audio classification failed",
+                error=str(e),
+                processing_time_ms=round(processing_time_ms, 2),
+            )
+            raise ClassificationError(f"Failed to classify audio message: {e}") from e
+
     def get_confidence_level(self, confidence: float) -> str:
         """Get a human-readable confidence level.
 
