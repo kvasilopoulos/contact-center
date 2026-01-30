@@ -2,16 +2,14 @@
 
 from dataclasses import dataclass
 import time
-from typing import Literal
 
 import structlog
 
 from app.config import Settings
+from app.schemas import CategoryType
 from app.services.llm_client import LLMClient, LLMClientError
 
 logger = structlog.get_logger(__name__)
-
-CategoryType = Literal["informational", "service_action", "safety_compliance"]
 
 
 @dataclass
@@ -203,24 +201,6 @@ class ClassifierService:
                 processing_time_ms=round(processing_time_ms, 2),
             )
             raise ClassificationError(f"Failed to classify audio message: {e}") from e
-
-    def get_confidence_level(self, confidence: float) -> str:
-        """Get a human-readable confidence level.
-
-        Args:
-            confidence: Confidence score between 0 and 1.
-
-        Returns:
-            String describing the confidence level.
-        """
-        if confidence >= 0.9:
-            return "high"
-        elif confidence >= 0.7:
-            return "moderate"
-        elif confidence >= 0.5:
-            return "low"
-        else:
-            return "very_low"
 
     def requires_human_review(self, confidence: float) -> bool:
         """Determine if the classification requires human review.

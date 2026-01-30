@@ -72,49 +72,6 @@ class LLMClient:
             )
         return self._client
 
-    async def complete(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        temperature: float = 0.0,
-        max_tokens: int = 500,
-    ) -> dict[str, Any]:
-        """Send a completion request to the LLM with circuit breaker protection.
-
-        Args:
-            system_prompt: The system prompt defining the task.
-            user_prompt: The user message to process.
-            temperature: Sampling temperature (0.0 for deterministic).
-            max_tokens: Maximum tokens in the response.
-
-        Returns:
-            Parsed JSON response from the LLM.
-
-        Raises:
-            LLMClientError: If the request fails or response is invalid.
-            LLMServiceUnavailable: If circuit breaker is open.
-        """
-        try:
-            result: dict[str, Any]
-            async with self._circuit_breaker:
-                result = await self._do_complete(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-            return result
-        except CircuitBreakerOpen as e:
-            logger.warning(
-                "Circuit breaker open - LLM service unavailable",
-                retry_after=e.retry_after,
-                circuit_state=self._circuit_breaker.state.value,
-            )
-            raise LLMServiceUnavailable(
-                "LLM service temporarily unavailable. Please try again later.",
-                retry_after=e.retry_after,
-            ) from e
-
     async def _do_complete_with_model(
         self,
         model: str,
@@ -201,28 +158,6 @@ class LLMClient:
         except OpenAIError as e:
             logger.error("OpenAI API error", error=str(e))
             raise LLMClientError(f"OpenAI API error: {e}") from e
-
-    @retry(
-        retry=retry_if_exception_type(OpenAIError),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
-        reraise=True,
-    )
-    async def _do_complete(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        temperature: float,
-        max_tokens: int,
-    ) -> dict[str, Any]:
-        """Internal method to perform the actual LLM call with retries (legacy wrapper)."""
-        return await self._do_complete_internal(
-            model=self.settings.openai_model,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
 
     async def complete_with_template(
         self,
@@ -494,27 +429,3 @@ class LLMClient:
         if timeout_seconds is not None:
             return await asyncio.wait_for(_inner(), timeout=timeout_seconds)
         return await _inner()
-
-    @property
-    def circuit_breaker_stats(self) -> dict[str, Any]:
-        """Get circuit breaker statistics."""
-        return self._circuit_breaker.get_stats()
-
-    async def health_check(self) -> bool:
-        """Check if the LLM service is available.
-
-        Returns:
-            True if the service is healthy, False otherwise.
-        """
-        try:
-            await self.client.models.retrieve(self.settings.openai_model)
-            return True
-        except Exception as e:
-            logger.warning("LLM health check failed", error=str(e))
-            return False
-
-    async def close(self) -> None:
-        """Close the client connection."""
-        if self._client is not None:
-            await self._client.close()
-            self._client = None

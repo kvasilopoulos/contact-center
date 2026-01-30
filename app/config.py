@@ -34,8 +34,6 @@ class Settings(BaseSettings):
     # OpenAI Configuration
     openai_api_key: SecretStr = Field(default=SecretStr(""))
     openai_model: str = "gpt-4o-mini"
-    # Default speech model for audio transcription / speech tasks
-    openai_speech_model: str = "gpt-4o-mini-transcribe"
     # Realtime model for audio-based interactions (WebSocket API)
     openai_realtime_model: str = "gpt-4o-realtime-preview"
     openai_timeout: float = 30.0
@@ -47,11 +45,6 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     rate_limit_requests_per_minute: int = 60
-    max_concurrent_requests: int = 100
-
-    # Monitoring
-    enable_metrics: bool = True
-    metrics_path: str = "/metrics"
 
 
 @lru_cache

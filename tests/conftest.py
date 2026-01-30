@@ -64,10 +64,8 @@ def test_settings() -> Settings:
 def mock_llm_client(test_settings: Settings) -> MagicMock:  # noqa: ARG001
     """Create a mock LLM client."""
     mock = MagicMock(spec=LLMClient)
-    mock.complete = AsyncMock()
     mock.complete_with_template = AsyncMock()
-    mock.health_check = AsyncMock(return_value=True)
-    mock.close = AsyncMock()
+    mock.classify_audio_realtime = AsyncMock()
     return mock
 
 

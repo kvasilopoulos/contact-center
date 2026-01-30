@@ -192,20 +192,6 @@ class TestClassifierService:
 
         assert "Failed to classify message" in str(exc_info.value)
 
-    def test_get_confidence_level(
-        self,
-        classifier_service: ClassifierService,
-    ) -> None:
-        """Test confidence level descriptions."""
-        assert classifier_service.get_confidence_level(0.95) == "high"
-        assert classifier_service.get_confidence_level(0.9) == "high"
-        assert classifier_service.get_confidence_level(0.8) == "moderate"
-        assert classifier_service.get_confidence_level(0.7) == "moderate"
-        assert classifier_service.get_confidence_level(0.6) == "low"
-        assert classifier_service.get_confidence_level(0.5) == "low"
-        assert classifier_service.get_confidence_level(0.4) == "very_low"
-        assert classifier_service.get_confidence_level(0.0) == "very_low"
-
     def test_requires_human_review(
         self,
         classifier_service: ClassifierService,
