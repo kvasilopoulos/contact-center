@@ -10,13 +10,40 @@ import logging
 import sys
 from typing import Any
 
+# Third-party loggers: always WARNING so they don't flood output regardless of app level.
+THIRD_PARTY_LOGGER_LEVELS: dict[str, str] = {
+    "uvicorn": "WARNING",
+    "uvicorn.error": "WARNING",
+    "uvicorn.access": "WARNING",
+    "watchfiles": "WARNING",
+}
+
 # Standard LogRecord attribute names to exclude from the JSON payload (extra only).
 _RECORD_ATTRS = frozenset(
     {
-        "name", "msg", "args", "created", "filename", "funcName", "levelname",
-        "levelno", "lineno", "module", "msecs", "pathname", "process",
-        "processName", "relativeCreated", "stack_info", "exc_info", "exc_text",
-        "message", "thread", "threadName", "taskName", "getMessage",
+        "name",
+        "msg",
+        "args",
+        "created",
+        "filename",
+        "funcName",
+        "levelname",
+        "levelno",
+        "lineno",
+        "module",
+        "msecs",
+        "pathname",
+        "process",
+        "processName",
+        "relativeCreated",
+        "stack_info",
+        "exc_info",
+        "exc_text",
+        "message",
+        "thread",
+        "threadName",
+        "taskName",
+        "getMessage",
     }
 )
 
@@ -42,8 +69,17 @@ class JsonFormatter(logging.Formatter):
 def configure_logging(
     level: str | int = "INFO",
     stream: Any = None,
+    logger_levels: dict[str, str | int] | None = None,
 ) -> None:
-    """Configure root logger with JSON output. Call once at application startup."""
+    """Configure root logger with JSON output. Call once at application startup.
+
+    Args:
+        level: Root logger level (e.g. "INFO", logging.INFO).
+        stream: Output stream; defaults to sys.stdout.
+        logger_levels: Optional mapping of logger names to levels, e.g.
+            {"uvicorn": "WARNING", "watchfiles": "WARNING"} to reduce noise from
+            third-party loggers.
+    """
     if stream is None:
         stream = sys.stdout
     root = logging.getLogger()
@@ -54,5 +90,10 @@ def configure_logging(
     handler.setLevel(root.level)
     root.addHandler(handler)
 
+    levels = {**THIRD_PARTY_LOGGER_LEVELS, **(logger_levels or {})}
+    for name, lvl in levels.items():
+        log = logging.getLogger(name)
+        log.setLevel(lvl if isinstance(lvl, int) else getattr(logging, lvl.upper()))
 
-__all__ = ["JsonFormatter", "configure_logging"]
+
+__all__ = ["THIRD_PARTY_LOGGER_LEVELS", "JsonFormatter", "configure_logging"]
