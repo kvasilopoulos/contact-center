@@ -10,10 +10,22 @@ import structlog
 from app.config import Settings, get_settings
 from app.schemas import ClassificationRequest, ClassificationResponse, NextStepInfo
 from app.services.classifier import ClassificationError, ClassifierService
+from app.telemetry import record_classification
 from app.workflows import InformationalWorkflow, SafetyComplianceWorkflow, ServiceActionWorkflow
 from app.workflows.base import WorkflowResult
 
 logger = structlog.get_logger(__name__)
+
+# Optional: wrap handlers with @observe() so production telemetry (Confident AI) gets traces
+try:
+    from deepeval.tracing import observe as _observe
+
+    _observe_decorator = _observe()
+except Exception:
+
+    def _observe_decorator(f):  # no-op when deepeval unavailable
+        return f
+
 
 router = APIRouter(tags=["Classification"])
 
@@ -41,6 +53,7 @@ def get_classifier_service(
         503: {"description": "LLM service unavailable"},
     },
 )
+@_observe_decorator
 async def classify_message(
     request: Request,
     payload: ClassificationRequest,
@@ -87,7 +100,7 @@ async def classify_message(
             external_system=workflow_result.external_system,
         )
 
-        return ClassificationResponse(
+        response = ClassificationResponse(
             request_id=request_id,
             category=result.category,
             confidence=result.confidence,
@@ -98,6 +111,12 @@ async def classify_message(
             prompt_variant=result.prompt_variant,
             model=result.model,
         )
+        record_classification(
+            input_message=payload.message,
+            channel=payload.channel,
+            response_json=response.model_dump_json(),
+        )
+        return response
 
     except ClassificationError as e:
         logger.error(
@@ -132,6 +151,7 @@ async def classify_message(
         503: {"description": "LLM service unavailable"},
     },
 )
+@_observe_decorator
 async def classify_voice_message(
     request: Request,
     audio_file: UploadFile = File(
@@ -210,7 +230,7 @@ async def classify_voice_message(
             external_system=workflow_result.external_system,
         )
 
-        return ClassificationResponse(
+        response = ClassificationResponse(
             request_id=request_id,
             category=result.category,
             confidence=result.confidence,
@@ -221,13 +241,34 @@ async def classify_voice_message(
             prompt_variant=result.prompt_variant,
             model=result.model,
         )
+        record_classification(
+            input_message="[voice]",
+            channel="voice",
+            response_json=response.model_dump_json(),
+        )
+        return response
 
     except ClassificationError as e:
+        error_str = str(e)
         logger.error(
             "Voice classification failed",
             request_id=request_id,
-            error=str(e),
+            error=error_str,
         )
+
+        # Check if this is an unsupported format error (client error, not server error)
+        if "Unsupported audio format" in error_str:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "unsupported_audio_format",
+                    "message": error_str.split(": ", 1)[-1] if ": " in error_str else error_str,
+                    "request_id": request_id,
+                    "supported_formats": ["wav"],
+                    "hint": "Convert audio to WAV format (mono, 16-bit PCM, 24kHz sample rate)",
+                },
+            ) from e
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={

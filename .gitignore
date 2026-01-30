@@ -23,7 +23,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+.deepeval/
 # PyInstaller
 *.manifest
 *.spec
