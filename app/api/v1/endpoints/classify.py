@@ -182,7 +182,7 @@ async def classify_voice_message(
         "Voice classification request received",
         extra={
             "request_id": request_id,
-            "filename": audio_file.filename,
+            "uploaded_filename": audio_file.filename,
             "content_type": audio_file.content_type,
         },
     )
