@@ -1,18 +1,11 @@
-"""Application data models and schemas."""
+"""Classification request and response schemas."""
 
 from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-# Type aliases
-ChannelType = Literal["chat", "voice", "mail"]
-CategoryType = Literal["informational", "service_action", "safety_compliance"]
-
-
-# ============================================================================
-# Request Models
-# ============================================================================
+from app.schemas.common import CategoryType, ChannelType
 
 
 class ClassificationRequest(BaseModel):
@@ -55,11 +48,6 @@ class ClassificationRequest(BaseModel):
             ]
         }
     }
-
-
-# ============================================================================
-# Response Models
-# ============================================================================
 
 
 class NextStepInfo(BaseModel):
@@ -157,117 +145,3 @@ class ClassificationResponse(BaseModel):
             ]
         }
     }
-
-
-class HealthResponse(BaseModel):
-    """Response model for health check endpoint."""
-
-    status: Literal["healthy", "degraded", "unhealthy"] = Field(
-        ...,
-        description="Overall health status of the service",
-    )
-    version: str = Field(
-        ...,
-        description="Application version",
-    )
-    environment: str = Field(
-        ...,
-        description="Current environment (development, staging, production)",
-    )
-    checks: dict[str, bool] = Field(
-        default_factory=dict,
-        description="Individual component health checks",
-    )
-
-
-class ErrorResponse(BaseModel):
-    """Response model for API errors."""
-
-    error: str = Field(
-        ...,
-        description="Error type",
-    )
-    message: str = Field(
-        ...,
-        description="Human-readable error message",
-    )
-    request_id: str | None = Field(
-        default=None,
-        description="Request ID if available",
-    )
-    details: dict[str, Any] | None = Field(
-        default=None,
-        description="Additional error details",
-    )
-
-
-# ============================================================================
-# Feedback Models (for continuous evaluation)
-# ============================================================================
-
-
-class FeedbackRequest(BaseModel):
-    """Request model for classification feedback."""
-
-    correct: bool = Field(
-        ...,
-        description="Whether the classification was correct",
-    )
-    expected_category: CategoryType | None = Field(
-        default=None,
-        description="The expected/correct category if classification was wrong",
-    )
-    comment: str | None = Field(
-        default=None,
-        max_length=1000,
-        description="Optional comment explaining the feedback",
-    )
-
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "correct": True,
-                },
-                {
-                    "correct": False,
-                    "expected_category": "safety_compliance",
-                    "comment": "Message mentioned health concerns",
-                },
-            ]
-        }
-    }
-
-
-class FeedbackResponse(BaseModel):
-    """Response model for feedback submission."""
-
-    request_id: str = Field(
-        ...,
-        description="The original request ID",
-    )
-    feedback_id: str = Field(
-        ...,
-        description="Unique identifier for this feedback submission",
-    )
-    recorded: bool = Field(
-        default=True,
-        description="Whether the feedback was successfully recorded",
-    )
-    message: str = Field(
-        default="Feedback recorded successfully",
-        description="Status message",
-    )
-
-
-__all__ = [
-    "CategoryType",
-    "ChannelType",
-    "ClassificationRequest",
-    "ClassificationResponse",
-    "ErrorResponse",
-    "FeedbackRequest",
-    "FeedbackResponse",
-    "HealthResponse",
-    "NextStepInfo",
-]
