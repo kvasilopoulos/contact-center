@@ -6,7 +6,7 @@
 
 - **Classify** incoming messages (chat, voice, mail) into three categories: **informational**, **service_action**, **safety_compliance**
 - **Route** each message to the right workflow (FAQ lookup, ticketing, or safety/compliance)
-- **Expose** a REST API for classification and feedback, plus a documentation UI and QA interface
+- **Expose** a REST API for classification, plus a documentation UI and QA interface
 
 ## Quick Links
 
@@ -38,5 +38,5 @@ Set `OPENAI_API_KEY` in the environment for classification to work.
 - **Single LLM call** per message for low latency
 - **Workflow-based routing** (informational, service action, safety compliance)
 - **Rate limiting** and **circuit breaker** for resilience
-- **PII redaction** in logs; **feedback endpoint** for continuous improvement
+- **PII redaction** in logs
 - **Structured logging** and optional **Confident AI** telemetry

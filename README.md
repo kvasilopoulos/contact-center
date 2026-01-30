@@ -200,7 +200,8 @@ cost-center-orchestrator/
 ├── tests/
 │   ├── unit/                 # Unit tests
 │   └── integration/          # Integration tests
-├── docker/                   # Docker configuration
+├── Dockerfile                # Production container
+├── docker-compose.yml        # Local run
 ├── .github/workflows/        # CI/CD pipelines
 └── docs/                     # Documentation
 ```

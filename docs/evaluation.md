@@ -46,7 +46,6 @@ Workflows (informational, service action, safety compliance) are tested and pass
 
 - **Offline (CI):** DeepEval tests in `tests/deepeval/test_classification_evals.py` use LLM-as-judge (GEval). Run: `deepeval test run tests/deepeval/`.
 - **Online (production):** When `CONFIDENT_API_KEY` is set, `@observe()` wraps classification endpoints and data is sent to Confident AI for monitoring.
-- **Feedback:** `POST /api/v1/classify/{id}/feedback` captures correct/expected_category/comment for continuous improvement.
 
 ## 4. Quality Gates
 

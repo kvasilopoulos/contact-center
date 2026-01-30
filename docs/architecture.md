@@ -11,41 +11,31 @@ End-to-end flow in one horizontal view: clients → load balancer → gateway �
 ```mermaid
 graph LR
     subgraph Clients["Clients"]
-        C1[Chat]
-        C2[Voice]
-        C3[Mail]
-        C4[API]
+        direction TB
+        C1[Chat] ~~~ C2[Voice] ~~~ C3[Mail] ~~~ C4[API]
     end
 
-    ALB[ALB]
-    RL[Rate Limit]
-    CB[Circuit Breaker]
     Classifier[Classifier]
-    LLM[LLM]
 
     subgraph Workflows["Workflows"]
-        Info[Informational]
-        Svc[Service Action]
-        Safety[Safety]
+        direction TB
+        Info[Informational] ~~~ W(( )) ~~~ Svc[Service Action] ~~~ Safety[Safety]
     end
 
     subgraph External["External"]
-        OpenAI[OpenAI]
+        direction TB
         KB[KB]
         Ticketing[Ticketing]
         Compliance[Compliance]
     end
 
-    Clients --> ALB
-    ALB --> RL
-    RL --> CB
-    CB --> Classifier
-    Classifier --> LLM
-    LLM --> OpenAI
-    Classifier --> Workflows
+    Clients --> Classifier
+    Classifier --> W
     Info --> KB
     Svc --> Ticketing
     Safety --> Compliance
+
+    style W fill:none,stroke:none
 ```
 
 ### Request path (horizontal)
