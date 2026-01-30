@@ -63,6 +63,26 @@ def extract_toc_from_markdown(content: str) -> list[dict[str, str]]:
 
 def render_markdown(content: str) -> str:
     """Render markdown content to HTML with extensions."""
+    import re
+    
+    # Store mermaid blocks with placeholders
+    mermaid_blocks = []
+    
+    def store_mermaid(match):
+        idx = len(mermaid_blocks)
+        mermaid_code = match.group(1).strip()
+        mermaid_blocks.append(mermaid_code)
+        # Use a unique placeholder that won't be processed by markdown
+        return f"<!--MERMAID_PLACEHOLDER_{idx}-->"
+    
+    # Replace mermaid blocks with placeholders before markdown processing
+    content = re.sub(
+        r'```\s*mermaid\s*[\r\n]+(.*?)[\r\n]+```',
+        store_mermaid,
+        content,
+        flags=re.DOTALL | re.IGNORECASE | re.MULTILINE
+    )
+    
     md = markdown.Markdown(
         extensions=[
             "extra",
@@ -81,7 +101,37 @@ def render_markdown(content: str) -> str:
             },
         },
     )
-    return md.convert(content)
+    html = md.convert(content)
+    
+    # Replace placeholders with mermaid divs after markdown processing
+    for idx, mermaid_code in enumerate(mermaid_blocks):
+        placeholder = f"<!--MERMAID_PLACEHOLDER_{idx}-->"
+        # Clean up the mermaid code
+        cleaned_code = mermaid_code.strip()
+        
+        # Replace HTML <br/> tags in labels - Mermaid v10 doesn't support HTML in labels
+        # Replace with space or remove, depending on context
+        # Pattern: find <br/> inside quoted strings and replace with space
+        def replace_br_in_labels(match):
+            label_content = match.group(1)
+            # Replace <br/> with space inside label content
+            label_content = re.sub(r'<br\s*/?>', ' ', label_content, flags=re.IGNORECASE)
+            return match.group(0)[:match.start(1)-match.start()] + label_content + match.group(0)[match.end(1)-match.start():]
+        
+        # Replace <br/> tags - simple approach: replace all with space
+        cleaned_code = re.sub(r'<br\s*/?>', ' ', cleaned_code, flags=re.IGNORECASE)
+        
+        # Clean up multiple spaces
+        cleaned_code = re.sub(r' +', ' ', cleaned_code)
+        
+        # Ensure proper line breaks
+        cleaned_code = '\n'.join(line.rstrip() for line in cleaned_code.split('\n'))
+        
+        # Create the mermaid div
+        mermaid_html = f'<div class="mermaid">\n{cleaned_code}\n</div>'
+        html = html.replace(placeholder, mermaid_html)
+    
+    return html
 
 
 def url_to_file_path(url_path: str) -> str:
@@ -156,58 +206,40 @@ def get_markdown_file(page: str) -> tuple[str, str]:
         raise HTTPException(status_code=500, detail="Failed to load documentation") from e
 
 
-@router.get("/", response_class=HTMLResponse)
-async def docs_home(request: Request) -> HTMLResponse:
-    """Render documentation home page."""
+@router.get("/{page:path}", response_class=HTMLResponse)
+async def docs_page(request: Request, page: str) -> HTMLResponse:
+    """Render a specific documentation page.
+    
+    If page is empty, redirect to the first page from sidebar config.
+    """
     sidebar_config = load_sidebar_config()
-
-    # Get the first page from sidebar config or use a default
-    first_page = None
-    if sidebar_config.get("sections"):
-        for section in sidebar_config["sections"]:
-            if section.get("pages"):
-                first_page = section["pages"][0].get("path")
-                break
-
-    if first_page:
-        # Load the first page content
-        try:
-            content, title = get_markdown_file(first_page)
-            html_content = render_markdown(content)
-            toc = extract_toc_from_markdown(content)
-
+    
+    # If no page specified, use first page from sidebar
+    if not page or page == "":
+        first_page = None
+        if sidebar_config.get("sections"):
+            for section in sidebar_config["sections"]:
+                if section.get("pages"):
+                    first_page = section["pages"][0].get("path")
+                    break
+        
+        if first_page:
+            # Redirect to first page
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=f"/{first_page}", status_code=302)
+        else:
+            # Fallback to welcome page
             return templates.TemplateResponse(
                 request=request,
                 name=DOCS_TEMPLATE,
                 context={
-                    "title": title,
-                    "content": html_content,
-                    "toc": toc,
+                    "title": "Documentation",
+                    "content": "<h1>Welcome to Documentation</h1><p>Please configure the sidebar to get started.</p>",
+                    "toc": [],
                     "sidebar": sidebar_config,
-                    "current_page": first_page,
+                    "current_page": "",
                 },
             )
-        except HTTPException:
-            pass
-
-    # Fallback to welcome page
-    return templates.TemplateResponse(
-        request=request,
-        name=DOCS_TEMPLATE,
-        context={
-            "title": "Documentation",
-            "content": "<h1>Welcome to Documentation</h1><p>Please configure the sidebar to get started.</p>",
-            "toc": [],
-            "sidebar": sidebar_config,
-            "current_page": "",
-        },
-    )
-
-
-@router.get("/{page:path}", response_class=HTMLResponse)
-async def docs_page(request: Request, page: str) -> HTMLResponse:
-    """Render a specific documentation page."""
-    sidebar_config = load_sidebar_config()
 
     # Get markdown content
     content, title = get_markdown_file(page)

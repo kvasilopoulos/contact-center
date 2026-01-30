@@ -3,26 +3,11 @@
 # Use lowercase with hyphens for URLs
 
 sections:
-  - title: "Getting Started"
+  - title: "Solution Design"
     pages:
-      - title: "Quick Start"
-        path: "aws-quick-start"
-
-  - title: "Architecture"
-    pages:
+      - title: "Solution Design"
+        path: "solution-design"
       - title: "System Architecture"
         path: "architecture"
-      - title: "Evaluation Framework"
+      - title: "Evaluation & Testing"
         path: "evaluation"
-
-  - title: "Deployment"
-    pages:
-      - title: "AWS Deployment Guide"
-        path: "aws-deployment"
-      - title: "AWS Setup Summary"
-        path: "aws-setup-summary"
-
-  - title: "Development"
-    pages:
-      - title: "Implementation Plan"
-        path: "plan/implementation-plan"

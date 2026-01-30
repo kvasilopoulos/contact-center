@@ -192,4 +192,6 @@ async def landing_page(request: Request) -> HTMLResponse:
 # API routes must come before docs router to avoid being caught by catch-all
 app.include_router(v1_router)
 app.include_router(ui_router, prefix="", tags=["UI"], include_in_schema=False)
-app.include_router(docs_router, prefix="/docs-pages", tags=["documentation"], include_in_schema=False)
+# Docs router mounted at root - API routes take precedence, so /api/* won't be caught
+# The docs router / route won't match because landing page is registered first
+app.include_router(docs_router, prefix="", tags=["documentation"], include_in_schema=False)

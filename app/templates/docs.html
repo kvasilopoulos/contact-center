@@ -6,8 +6,10 @@
     <title>{{ title }} - Documentation</title>
     <script type="module">
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        
+        // Initialize Mermaid but don't auto-render yet
         mermaid.initialize({ 
-            startOnLoad: true,
+            startOnLoad: false,
             theme: 'base',
             themeVariables: {
                 primaryColor: '#f4f4f5',
@@ -20,6 +22,26 @@
                 fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
             }
         });
+        
+        // Store mermaid instance globally and trigger conversion when DOM is ready
+        window.mermaidInstance = mermaid;
+        window.mermaidReady = true;
+        
+        // If DOM is already loaded, trigger conversion
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                if (window.convertMermaidBlocks) {
+                    window.convertMermaidBlocks();
+                }
+            });
+        } else {
+            // DOM already loaded
+            setTimeout(function() {
+                if (window.convertMermaidBlocks) {
+                    window.convertMermaidBlocks();
+                }
+            }, 100);
+        }
     </script>
     <style>
         :root {
@@ -416,17 +438,111 @@
     </div>
 
     <script>
-        // Convert code blocks with language "mermaid" to mermaid diagrams
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('pre code.language-mermaid, pre code[class*="lang-mermaid"]').forEach(function(block) {
-                const pre = block.parentElement;
-                const code = block.textContent;
-                const div = document.createElement('div');
-                div.className = 'mermaid';
-                div.textContent = code;
-                pre.replaceWith(div);
+        // Function to convert code blocks to mermaid diagrams and render them
+        window.convertMermaidBlocks = function() {
+            // First, check if mermaid divs already exist (from server-side processing)
+            const existingMermaidDivs = document.querySelectorAll('div.mermaid');
+            
+            // Also find code blocks that might be mermaid
+            const selectors = [
+                'pre code.language-mermaid',
+                'pre code.lang-mermaid',
+                'pre code[class*="mermaid"]',
+                'pre code[class*="language-mermaid"]',
+                'pre code[class*="lang-mermaid"]'
+            ];
+            
+            const codeBlocksToConvert = [];
+            selectors.forEach(selector => {
+                document.querySelectorAll(selector).forEach(block => {
+                    codeBlocksToConvert.push(block);
+                });
             });
-        });
+            
+            // Also check pre tags that might contain mermaid code by content
+            document.querySelectorAll('pre code').forEach(block => {
+                const text = block.textContent.trim();
+                // If it looks like mermaid syntax
+                if (text.match(/^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|gitgraph|journey|requirement)/)) {
+                    if (!codeBlocksToConvert.includes(block)) {
+                        codeBlocksToConvert.push(block);
+                    }
+                }
+            });
+            
+            // Convert code blocks to mermaid divs
+            codeBlocksToConvert.forEach(function(block) {
+                const pre = block.parentElement;
+                if (pre && pre.tagName === 'PRE') {
+                    const code = block.textContent.trim();
+                    const div = document.createElement('div');
+                    div.className = 'mermaid';
+                    div.textContent = code;
+                    pre.replaceWith(div);
+                }
+            });
+            
+            // Render all mermaid diagrams (both existing and newly converted)
+            if (window.mermaidInstance) {
+                const allMermaidDivs = document.querySelectorAll('div.mermaid');
+                if (allMermaidDivs.length > 0) {
+                    try {
+                        window.mermaidInstance.run();
+                    } catch (error) {
+                        console.error('Mermaid rendering error:', error);
+                        // Show error in the diagram div
+                        allMermaidDivs.forEach(div => {
+                            if (!div.querySelector('svg')) {
+                                div.innerHTML = '<p style="color: red;">Mermaid diagram error: ' + error.message + '</p><pre>' + div.textContent.substring(0, 200) + '...</pre>';
+                            }
+                        });
+                    }
+                }
+            }
+        };
+        
+        // Run conversion when ready
+        function initMermaid() {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    setTimeout(function() {
+                        if (window.mermaidInstance) {
+                            window.convertMermaidBlocks();
+                        } else {
+                            // Wait for mermaid to load
+                            const checkInterval = setInterval(function() {
+                                if (window.mermaidInstance) {
+                                    clearInterval(checkInterval);
+                                    window.convertMermaidBlocks();
+                                }
+                            }, 50);
+                            setTimeout(function() {
+                                clearInterval(checkInterval);
+                            }, 3000);
+                        }
+                    }, 100);
+                });
+            } else {
+                // DOM already loaded
+                setTimeout(function() {
+                    if (window.mermaidInstance) {
+                        window.convertMermaidBlocks();
+                    } else {
+                        const checkInterval = setInterval(function() {
+                            if (window.mermaidInstance) {
+                                clearInterval(checkInterval);
+                                window.convertMermaidBlocks();
+                            }
+                        }, 50);
+                        setTimeout(function() {
+                            clearInterval(checkInterval);
+                        }, 3000);
+                    }
+                }, 200);
+            }
+        }
+        
+        initMermaid();
 
         // Smooth scroll for TOC links
         document.querySelectorAll('.toc-link').forEach(link => {
