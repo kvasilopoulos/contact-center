@@ -1,16 +1,15 @@
 """AI Classifier service for message categorization."""
 
 from dataclasses import dataclass
+import logging
 import time
-
-import structlog
 
 from app.config import Settings
 from app.schemas import CategoryType
 from app.services.llm_client import LLMClient, LLMClientError
 from app.utils.pii_redaction import redact_pii
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -80,9 +79,11 @@ class ClassifierService:
             if category not in valid_categories:
                 logger.warning(
                     "Invalid category returned by LLM",
-                    category=category,
-                    valid_categories=list(valid_categories),
-                    prompt_version=prompt_metadata.get("version"),
+                    extra={
+                        "category": category,
+                        "valid_categories": list(valid_categories),
+                        "prompt_version": prompt_metadata.get("version"),
+                    },
                 )
                 # Default to service_action with low confidence for unknown categories
                 category = "service_action"
@@ -96,14 +97,18 @@ class ClassifierService:
 
             logger.info(
                 "Message classified",
-                category=category,
-                confidence=confidence,
-                channel=channel,
-                processing_time_ms=round(processing_time_ms, 2),
-                prompt_version=prompt_metadata.get("version"),
-                prompt_variant=prompt_metadata.get("variant"),
-                model=prompt_metadata.get("model"),
-                message_preview=redact_pii(message[:100]) if len(message) > 100 else redact_pii(message),
+                extra={
+                    "category": category,
+                    "confidence": confidence,
+                    "channel": channel,
+                    "processing_time_ms": round(processing_time_ms, 2),
+                    "prompt_version": prompt_metadata.get("version"),
+                    "prompt_variant": prompt_metadata.get("variant"),
+                    "model": prompt_metadata.get("model"),
+                    "message_preview": redact_pii(message[:100])
+                    if len(message) > 100
+                    else redact_pii(message),
+                },
             )
 
             return ClassificationResult(
@@ -120,8 +125,10 @@ class ClassifierService:
             processing_time_ms = (time.perf_counter() - start_time) * 1000
             logger.error(
                 "Classification failed",
-                error=str(e),
-                processing_time_ms=round(processing_time_ms, 2),
+                extra={
+                    "error": str(e),
+                    "processing_time_ms": round(processing_time_ms, 2),
+                },
             )
             raise ClassificationError(f"Failed to classify message: {e}") from e
 
@@ -163,10 +170,12 @@ class ClassifierService:
             if category not in valid_categories:
                 logger.warning(
                     "Invalid category returned by Realtime LLM",
-                    category=category,
-                    valid_categories=list(valid_categories),
-                    prompt_id=prompt_metadata.get("prompt_id"),
-                    prompt_version=prompt_metadata.get("version"),
+                    extra={
+                        "category": category,
+                        "valid_categories": list(valid_categories),
+                        "prompt_id": prompt_metadata.get("prompt_id"),
+                        "prompt_version": prompt_metadata.get("version"),
+                    },
                 )
                 # Default to service_action with low confidence for unknown categories
                 category = "service_action"
@@ -180,13 +189,15 @@ class ClassifierService:
 
             logger.info(
                 "Audio message classified",
-                category=category,
-                confidence=confidence,
-                channel=channel,
-                processing_time_ms=round(processing_time_ms, 2),
-                prompt_id=prompt_metadata.get("prompt_id"),
-                prompt_version=prompt_metadata.get("version"),
-                model=prompt_metadata.get("model"),
+                extra={
+                    "category": category,
+                    "confidence": confidence,
+                    "channel": channel,
+                    "processing_time_ms": round(processing_time_ms, 2),
+                    "prompt_id": prompt_metadata.get("prompt_id"),
+                    "prompt_version": prompt_metadata.get("version"),
+                    "model": prompt_metadata.get("model"),
+                },
             )
 
             return ClassificationResult(
@@ -203,8 +214,10 @@ class ClassifierService:
             processing_time_ms = (time.perf_counter() - start_time) * 1000
             logger.error(
                 "Realtime audio classification failed",
-                error=str(e),
-                processing_time_ms=round(processing_time_ms, 2),
+                extra={
+                    "error": str(e),
+                    "processing_time_ms": round(processing_time_ms, 2),
+                },
             )
             raise ClassificationError(f"Failed to classify audio message: {e}") from e
 

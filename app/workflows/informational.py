@@ -3,14 +3,13 @@
 Handles messages seeking information about policies, products, FAQs, etc.
 """
 
+import logging
 import re
 from typing import Any
 
-import structlog
-
 from app.workflows.base import BaseWorkflow, WorkflowResult
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 # Mock FAQ/Knowledge Base for demonstration
@@ -93,8 +92,10 @@ class InformationalWorkflow(BaseWorkflow):
         """
         logger.info(
             "Executing informational workflow",
-            message_length=len(message),
-            confidence=confidence,
+            extra={
+                "message_length": len(message),
+                "confidence": confidence,
+            },
         )
 
         # Check if escalation is needed due to low confidence
@@ -157,7 +158,7 @@ class InformationalWorkflow(BaseWorkflow):
         # In production, this would use semantic search or a proper search engine
         for keyword, faq_entry in FAQ_DATABASE.items():
             if keyword in message_lower:
-                logger.debug("FAQ match found", keyword=keyword)
+                logger.debug("FAQ match found", extra={"keyword": keyword})
                 return faq_entry
 
         # Check for common patterns

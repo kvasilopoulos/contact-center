@@ -1,6 +1,6 @@
 """Application data models and schemas."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -95,7 +95,7 @@ class ClassificationResponse(BaseModel):
         description="Unique identifier for this request",
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp of the classification",
     )
     category: CategoryType = Field(

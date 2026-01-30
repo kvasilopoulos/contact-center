@@ -1,12 +1,12 @@
 """Prompt template dataclass and rendering logic."""
 
 from dataclasses import dataclass, field
+import logging
 from typing import Any
 
 from jinja2 import Template, TemplateSyntaxError
-import structlog
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -70,9 +70,11 @@ class PromptTemplate:
         except TemplateSyntaxError as e:
             logger.error(
                 "Invalid Jinja2 template in user_prompt_template",
-                prompt_id=self.id,
-                version=self.version,
-                error=str(e),
+                extra={
+                    "prompt_id": self.id,
+                    "version": self.version,
+                    "error": str(e),
+                },
             )
             raise ValueError(f"Invalid template syntax in {self.id} v{self.version}: {e}") from e
 
@@ -105,10 +107,12 @@ class PromptTemplate:
         except Exception as e:
             logger.error(
                 "Failed to render user prompt template",
-                prompt_id=self.id,
-                version=self.version,
-                error=str(e),
-                variables=list(variables.keys()),
+                extra={
+                    "prompt_id": self.id,
+                    "version": self.version,
+                    "error": str(e),
+                    "variables": list(variables.keys()),
+                },
             )
             raise ValueError(f"Failed to render template for {self.id} v{self.version}: {e}") from e
 

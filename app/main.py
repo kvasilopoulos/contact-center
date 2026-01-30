@@ -2,45 +2,29 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+import logging
+from pathlib import Path
 import time
 import uuid
-
-from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.openapi.docs import get_swagger_ui_html
-import structlog
 
 from app.api.v1 import router as v1_router
 from app.config import get_settings
 from app.docs.router import router as docs_router
+from app.logging_config import configure_logging
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.prompts import load_prompts, registry
 from app.schemas import ErrorResponse
 from app.ui import router as ui_router
 
-# Configure structured logging
-structlog.configure(
-    processors=[
-        structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        structlog.processors.JSONRenderer(),
-    ],
-    wrapper_class=structlog.stdlib.BoundLogger,
-    context_class=dict,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    cache_logger_on_first_use=True,
-)
-
-logger = structlog.get_logger(__name__)
+configure_logging(get_settings().log_level)
+logger = logging.getLogger(__name__)
 
 # Setup templates for landing page
 templates_dir = Path(__file__).parent / "templates"
@@ -53,9 +37,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     settings = get_settings()
     logger.info(
         "Starting application",
-        app_name=settings.app_name,
-        version=settings.app_version,
-        environment=settings.environment,
+        extra={
+            "app_name": settings.app_name,
+            "version": settings.app_version,
+            "environment": settings.environment,
+        },
     )
 
     # Load prompt templates from YAML files
@@ -63,20 +49,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         load_prompts()
         logger.info(
             "Prompts loaded successfully",
-            registry_stats=registry.get_stats(),
-            available_prompts=registry.list_prompts(),
+            extra={
+                "registry_stats": registry.get_stats(),
+                "available_prompts": registry.list_prompts(),
+            },
         )
     except FileNotFoundError as e:
         logger.error(
             "Failed to load prompts - prompts directory not found",
-            error=str(e),
-            hint="Create a 'prompts/' directory at project root with YAML prompt files",
+            extra={
+                "error": str(e),
+                "hint": "Create a 'prompts/' directory at project root with YAML prompt files",
+            },
         )
         raise
     except Exception as e:
         logger.error(
             "Failed to load prompts",
-            error=str(e),
+            extra={"error": str(e)},
             exc_info=True,
         )
         raise
@@ -106,7 +96,7 @@ app = FastAPI(
 async def custom_swagger_ui_html() -> HTMLResponse:
     """Serve Swagger UI with a custom favicon."""
     return get_swagger_ui_html(
-        openapi_url=app.openapi_url,
+        openapi_url=app.openapi_url or "/openapi.json",
         title=f"{app.title} - Swagger UI",
         swagger_favicon_url=(
             "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' "
@@ -117,7 +107,8 @@ async def custom_swagger_ui_html() -> HTMLResponse:
         ),
     )
 
-# CORS middleware
+
+# CORS middleware (Starlette types expect factory, class is valid at runtime)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Configure appropriately for production
@@ -136,7 +127,7 @@ app.add_middleware(
 
 # Request ID middleware
 @app.middleware("http")
-async def add_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]
+async def add_request_id(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     request.state.request_id = request_id
     start_time = time.perf_counter()
@@ -149,11 +140,13 @@ async def add_request_id(request: Request, call_next):  # type: ignore[no-untype
 
     logger.info(
         "Request completed",
-        request_id=request_id,
-        method=request.method,
-        path=request.url.path,
-        status_code=response.status_code,
-        process_time_ms=round(process_time, 2),
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "process_time_ms": round(process_time, 2),
+        },
     )
 
     return response
@@ -181,8 +174,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     request_id = getattr(request.state, "request_id", None)
     logger.error(
         "Unhandled exception",
-        request_id=request_id,
-        error=str(exc),
+        extra={"request_id": request_id, "error": str(exc)},
         exc_info=True,
     )
     return JSONResponse(

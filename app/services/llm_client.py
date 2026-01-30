@@ -6,10 +6,10 @@ import asyncio
 import base64
 import contextlib
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 from openai import AsyncOpenAI, OpenAIError
-import structlog
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 import websockets
 from websockets.asyncio.client import ClientConnection
@@ -23,10 +23,9 @@ from app.services.audio_utils import (
     AudioFormatError,
     convert_wav_to_pcm16_24khz,
     detect_audio_format,
-    is_wav_file,
 )
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # Global circuit breaker for OpenAI API
 _openai_circuit_breaker = CircuitBreaker(
@@ -187,8 +186,10 @@ class LLMClient:
         except CircuitBreakerOpen as e:
             logger.warning(
                 "Circuit breaker open - LLM service unavailable",
-                retry_after=e.retry_after,
-                circuit_state=self._circuit_breaker.state.value,
+                extra={
+                    "retry_after": e.retry_after,
+                    "circuit_state": self._circuit_breaker.state.value,
+                },
             )
             raise LLMServiceUnavailable(
                 "LLM service temporarily unavailable. Please try again later.",
@@ -223,8 +224,7 @@ class LLMClient:
         try:
             logger.debug(
                 "Sending LLM request",
-                model=model,
-                user_prompt_length=len(user_prompt),
+                extra={"model": model, "user_prompt_length": len(user_prompt)},
             )
 
             # Default to structured output schema if not provided
@@ -248,18 +248,22 @@ class LLMClient:
 
             logger.debug(
                 "LLM response received",
-                model=model,
-                usage=response.usage.model_dump() if response.usage else None,
+                extra={
+                    "model": model,
+                    "usage": response.usage.model_dump() if response.usage else None,
+                },
             )
 
             result: dict[str, Any] = json.loads(content)
             return result
 
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse LLM response as JSON", error=str(e))
+            logger.error(
+                "Failed to parse LLM response as JSON", extra={"error": str(e)}
+            )
             raise LLMClientError(f"Invalid JSON response from LLM: {e}") from e
         except OpenAIError as e:
-            logger.error("OpenAI API error", error=str(e))
+            logger.error("OpenAI API error", extra={"error": str(e)})
             raise LLMClientError(f"OpenAI API error: {e}") from e
 
     async def complete_with_template(
@@ -314,9 +318,11 @@ class LLMClient:
         except ValueError as e:
             logger.error(
                 "Failed to render prompt template",
-                template_id=template_id,
-                version=metadata["version"],
-                error=str(e),
+                extra={
+                    "template_id": template_id,
+                    "version": metadata["version"],
+                    "error": str(e),
+                },
             )
             raise
 
@@ -338,11 +344,13 @@ class LLMClient:
         # Log prompt usage
         logger.info(
             "Using prompt template",
-            prompt_id=metadata["prompt_id"],
-            version=metadata["version"],
-            variant=metadata.get("variant"),
-            experiment_id=metadata.get("experiment_id"),
-            model=model_to_use,
+            extra={
+                "prompt_id": metadata["prompt_id"],
+                "version": metadata["version"],
+                "variant": metadata.get("variant"),
+                "experiment_id": metadata.get("experiment_id"),
+                "model": model_to_use,
+            },
         )
 
         # Build response format from template config
@@ -389,15 +397,17 @@ class LLMClient:
         except CircuitBreakerOpen as e:
             logger.warning(
                 "Circuit breaker open - Realtime service unavailable",
-                retry_after=e.retry_after,
-                circuit_state=self._circuit_breaker.state.value,
+                extra={
+                    "retry_after": e.retry_after,
+                    "circuit_state": self._circuit_breaker.state.value,
+                },
             )
             raise LLMServiceUnavailable(
                 "Realtime service temporarily unavailable. Please try again later.",
                 retry_after=e.retry_after,
             ) from e
 
-    async def _do_classify_audio_realtime(
+    async def _do_classify_audio_realtime(  # noqa: PLR0912, PLR0915
         self,
         audio: bytes,
         channel: str,
@@ -416,6 +426,7 @@ class LLMClient:
             logger.warning(
                 "Audio classification prompt 'classification_audio' not found, "
                 "falling back to 'classification'",
+                extra={},
             )
             template = registry.get_active("classification")
             prompt_id = "classification"
@@ -456,8 +467,10 @@ class LLMClient:
                 pcm_audio = convert_wav_to_pcm16_24khz(audio)
                 logger.info(
                     "Converted WAV to PCM16 24kHz",
-                    input_bytes=len(audio),
-                    output_bytes=len(pcm_audio),
+                    extra={
+                        "input_bytes": len(audio),
+                        "output_bytes": len(pcm_audio),
+                    },
                 )
             elif audio_format in ("webm", "ogg", "mp3", "flac"):
                 # These formats require external tools (ffmpeg) to convert
@@ -471,7 +484,7 @@ class LLMClient:
                 # Could be raw PCM - try to use it directly but warn
                 logger.warning(
                     "Unknown audio format, attempting to use as raw PCM16 at 24kHz",
-                    input_bytes=len(audio),
+                    extra={"input_bytes": len(audio)},
                 )
                 pcm_audio = audio
             else:
@@ -490,10 +503,12 @@ class LLMClient:
 
         logger.debug(
             "Opening Realtime WebSocket for audio classification",
-            model=model_to_use,
-            audio_bytes=len(audio),
-            prompt_id=template.id,
-            prompt_version=template.version,
+            extra={
+                "model": model_to_use,
+                "audio_bytes": len(audio),
+                "prompt_id": template.id,
+                "prompt_version": template.version,
+            },
         )
 
         try:
@@ -520,7 +535,7 @@ class LLMClient:
                         raw = await ws.recv()
                         event = json.loads(raw)
                         if event.get("type") == "session.updated":
-                            logger.debug("Realtime session configured successfully")
+                            logger.debug("Realtime session configured successfully", extra={})
                             break
                         if event.get("type") == "error":
                             error_msg = event.get("error", {}).get("message", "Unknown error")
@@ -553,7 +568,7 @@ class LLMClient:
                         event = json.loads(raw)
                         event_type = event.get("type")
                         if event_type == "conversation.item.created":
-                            logger.debug("Conversation item created successfully")
+                            logger.debug("Conversation item created successfully", extra={})
                             break
                         if event_type == "error":
                             error_msg = event.get("error", {}).get("message", "Unknown error")
@@ -574,8 +589,10 @@ class LLMClient:
                 except Exception as send_error:
                     logger.error(
                         "Error during Realtime WebSocket communication",
-                        error=str(send_error),
-                        error_type=type(send_error).__name__,
+                        extra={
+                            "error": str(send_error),
+                            "error_type": type(send_error).__name__,
+                        },
                         exc_info=True,
                     )
                     raise
@@ -584,19 +601,26 @@ class LLMClient:
                     with contextlib.suppress(Exception):
                         await ws.close()
         except asyncio.TimeoutError as e:
-            logger.error("Realtime classification timed out", error=str(e))
+            logger.error(
+                "Realtime classification timed out", extra={"error": str(e)}
+            )
             raise LLMClientError("Realtime audio classification timed out") from e
         except (ConnectionClosed, ConnectionClosedError, ConnectionClosedOK) as e:
             error_msg = f"WebSocket connection closed: code={e.code}, reason={e.reason or 'No reason provided'}"
-            logger.error("Realtime WebSocket connection closed", code=e.code, reason=e.reason)
+            logger.error(
+                "Realtime WebSocket connection closed",
+                extra={"code": e.code, "reason": e.reason},
+            )
             raise LLMClientError(error_msg) from e
         except Exception as e:
-            error_msg = str(e) if str(e) else f"{type(e).__name__}: {repr(e)}"
+            error_msg = str(e) if str(e) else f"{type(e).__name__}: {e!r}"
             logger.error(
                 "Realtime WebSocket error",
-                error=error_msg,
-                error_type=type(e).__name__,
-                error_repr=repr(e),
+                extra={
+                    "error": error_msg,
+                    "error_type": type(e).__name__,
+                    "error_repr": repr(e),
+                },
                 exc_info=True,
             )
             raise LLMClientError(f"Realtime audio classification failed: {error_msg}") from e
@@ -612,7 +636,7 @@ class LLMClient:
         attempts to parse the last non-empty text chunk as JSON.
         """
 
-        async def _inner() -> dict[str, Any]:
+        async def _inner() -> dict[str, Any]:  # noqa: PLR0912
             accumulated_text: str = ""
             while True:
                 try:
@@ -620,7 +644,8 @@ class LLMClient:
                 except (ConnectionClosed, ConnectionClosedError, ConnectionClosedOK) as e:
                     error_msg = f"WebSocket closed during response: code={e.code}, reason={e.reason or 'No reason provided'}"
                     logger.error(
-                        "WebSocket closed while waiting for response", code=e.code, reason=e.reason
+                        "WebSocket closed while waiting for response",
+                        extra={"code": e.code, "reason": e.reason},
                     )
                     raise LLMClientError(error_msg) from e
                 try:
@@ -632,7 +657,7 @@ class LLMClient:
                 event_type = event.get("type")
 
                 # Log all events for debugging
-                logger.debug("Realtime event received", event_type=event_type)
+                logger.debug("Realtime event received", extra={"event_type": event_type})
 
                 # Collect text from response.text.delta events
                 if event_type == "response.text.delta":
@@ -668,8 +693,7 @@ class LLMClient:
                     except json.JSONDecodeError as e:
                         logger.error(
                             "Failed to parse Realtime response text as JSON",
-                            error=str(e),
-                            text_preview=accumulated_text[:500],
+                            extra={"error": str(e), "text_preview": accumulated_text[:500]},
                         )
                         raise LLMClientError(
                             f"Realtime response was not valid JSON: {accumulated_text[:200]}"
@@ -680,7 +704,10 @@ class LLMClient:
                     error_info = event.get("error", {})
                     message = error_info.get("message", "Unknown Realtime error")
                     code = error_info.get("code", "")
-                    logger.error("Realtime API error", code=code, message=message)
+                    logger.error(
+                        "Realtime API error",
+                        extra={"code": code, "message": message},
+                    )
                     raise LLMClientError(f"Realtime API error: {message}")
 
         if timeout_seconds is not None:

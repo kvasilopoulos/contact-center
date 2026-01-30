@@ -4,14 +4,13 @@ This module provides functionality to detect and redact sensitive information
 from text to ensure compliance with data protection regulations.
 """
 
-import re
 from dataclasses import dataclass, field
 from enum import Enum
+import logging
+import re
 from typing import ClassVar
 
-import structlog
-
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class PIIType(Enum):
@@ -176,8 +175,10 @@ class PIIRedactor:
         if matches:
             logger.info(
                 "PII redacted from text",
-                pii_types=[m.pii_type.value for m in matches],
-                count=len(matches),
+                extra={
+                    "pii_types": [m.pii_type.value for m in matches],
+                    "count": len(matches),
+                },
             )
 
         return redacted_text, matches
@@ -205,22 +206,18 @@ class PIIRedactor:
         Returns:
             True if PII is detected, False otherwise.
         """
-        for pattern in self._patterns.values():
-            if pattern.search(text):
-                return True
-        return False
+        return any(pattern.search(text) for pattern in self._patterns.values())
 
 
-# Global instance for convenience
-_default_redactor: PIIRedactor | None = None
+# Singleton holder to avoid global statement
+_default_redactor_holder: list[PIIRedactor | None] = [None]
 
 
 def get_redactor() -> PIIRedactor:
     """Get the default PIIRedactor instance (singleton)."""
-    global _default_redactor
-    if _default_redactor is None:
-        _default_redactor = PIIRedactor()
-    return _default_redactor
+    if _default_redactor_holder[0] is None:
+        _default_redactor_holder[0] = PIIRedactor()
+    return _default_redactor_holder[0]
 
 
 def redact_pii(text: str) -> str:

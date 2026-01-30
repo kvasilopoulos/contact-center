@@ -173,7 +173,7 @@ class TestEdgeCases:
     def test_adjacent_pii(self, redactor: PIIRedactor) -> None:
         """Test PII that appears adjacent to each other."""
         text = "123-45-6789 test@example.com"
-        redacted, matches = redactor.redact(text)
+        redacted, _ = redactor.redact(text)
         assert "[SSN_REDACTED]" in redacted
         assert "[EMAIL_REDACTED]" in redacted
 
@@ -184,7 +184,7 @@ class TestEdgeCases:
             "Contact: john.doe@email.com, Phone: (555) 987-6543. "
             "DOB: 03/15/1985. Please review urgently."
         )
-        redacted, matches = redactor.redact(text)
+        redacted, _ = redactor.redact(text)
         # PII should be redacted
         assert "PAT123456" not in redacted
         assert "john.doe@email.com" not in redacted
@@ -203,7 +203,7 @@ class TestEdgeCases:
     def test_unicode_text(self, redactor: PIIRedactor) -> None:
         """Test text with unicode characters."""
         text = "Email: test@example.com, Message: Hello 你好 مرحبا"
-        redacted, matches = redactor.redact(text)
+        redacted, _ = redactor.redact(text)
         assert "[EMAIL_REDACTED]" in redacted
         assert "你好" in redacted
         assert "مرحبا" in redacted

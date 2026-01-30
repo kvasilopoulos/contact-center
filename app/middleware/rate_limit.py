@@ -3,15 +3,15 @@
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+import logging
 import time
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-import structlog
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -98,8 +98,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         logger.info(
             "Rate limiter initialized",
-            requests_per_minute=requests_per_minute,
-            burst_size=self.burst_size,
+            extra={
+                "requests_per_minute": requests_per_minute,
+                "burst_size": self.burst_size,
+            },
         )
 
     async def dispatch(
@@ -125,8 +127,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not bucket.consume():
             logger.warning(
                 "Rate limit exceeded",
-                client_id=client_id,
-                path=request.url.path,
+                extra={"client_id": client_id, "path": request.url.path},
             )
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,

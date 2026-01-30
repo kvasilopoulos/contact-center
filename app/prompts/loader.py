@@ -1,15 +1,15 @@
 """YAML prompt loader for loading prompts from files."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
-import structlog
 import yaml
 
 from app.prompts.registry import ExperimentConfig, ExperimentVariant, get_registry
 from app.prompts.template import LLMConfig, PromptMetadata, PromptParameter, PromptTemplate
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def get_prompts_directory() -> Path:
@@ -159,9 +159,11 @@ def parse_experiments(data: dict[str, Any], file_path: Path) -> list[ExperimentC
         except Exception as e:
             logger.error(
                 "Failed to parse experiment",
-                file_path=str(file_path),
-                experiment_id=exp_data.get("id", "unknown"),
-                error=str(e),
+                extra={
+                    "file_path": str(file_path),
+                    "experiment_id": exp_data.get("id", "unknown"),
+                    "error": str(e),
+                },
             )
             continue
 
@@ -182,23 +184,24 @@ def load_prompt_file(file_path: Path) -> PromptTemplate | None:
             data = yaml.safe_load(f)
 
         if not data:
-            logger.warning("Empty YAML file", file_path=str(file_path))
+            logger.warning("Empty YAML file", extra={"file_path": str(file_path)})
             return None
 
         template = parse_prompt_template(data, file_path)
         logger.debug(
             "Loaded prompt template",
-            file_path=str(file_path),
-            prompt_id=template.id,
-            version=template.version,
+            extra={
+                "file_path": str(file_path),
+                "prompt_id": template.id,
+                "version": template.version,
+            },
         )
         return template
 
     except Exception as e:
         logger.error(
             "Failed to load prompt file",
-            file_path=str(file_path),
-            error=str(e),
+            extra={"file_path": str(file_path), "error": str(e)},
         )
         return None
 
@@ -217,22 +220,20 @@ def load_experiments_file(file_path: Path) -> list[ExperimentConfig]:
             data = yaml.safe_load(f)
 
         if not data:
-            logger.warning("Empty experiments file", file_path=str(file_path))
+            logger.warning("Empty experiments file", extra={"file_path": str(file_path)})
             return []
 
         experiments = parse_experiments(data, file_path)
         logger.info(
             "Loaded experiments",
-            file_path=str(file_path),
-            count=len(experiments),
+            extra={"file_path": str(file_path), "count": len(experiments)},
         )
         return experiments
 
     except Exception as e:
         logger.error(
             "Failed to load experiments file",
-            file_path=str(file_path),
-            error=str(e),
+            extra={"file_path": str(file_path), "error": str(e)},
         )
         return []
 
@@ -262,7 +263,7 @@ def load_prompts(prompts_dir: Path | None = None) -> None:
     templates_loaded = 0
     experiments_loaded = 0
 
-    logger.info("Loading prompts from directory", prompts_dir=str(prompts_dir))
+    logger.info("Loading prompts from directory", extra={"prompts_dir": str(prompts_dir)})
 
     # Walk through all subdirectories
     for yaml_file in prompts_dir.rglob("*.yaml"):
@@ -285,14 +286,18 @@ def load_prompts(prompts_dir: Path | None = None) -> None:
 
     logger.info(
         "Finished loading prompts",
-        templates_loaded=templates_loaded,
-        experiments_loaded=experiments_loaded,
-        registry_stats=registry.get_stats(),
+        extra={
+            "templates_loaded": templates_loaded,
+            "experiments_loaded": experiments_loaded,
+            "registry_stats": registry.get_stats(),
+        },
     )
 
     if templates_loaded == 0:
         logger.warning(
             "No prompt templates found",
-            prompts_dir=str(prompts_dir),
-            hint="Create YAML files in subdirectories like prompts/classification/v1.0.0.yaml",
+            extra={
+                "prompts_dir": str(prompts_dir),
+                "hint": "Create YAML files in subdirectories like prompts/classification/v1.0.0.yaml",
+            },
         )

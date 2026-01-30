@@ -12,12 +12,11 @@ This module provides utilities to convert WAV files to this format.
 from __future__ import annotations
 
 import io
+import logging
 import struct
 import wave
 
-import structlog
-
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # OpenAI Realtime API expected format
 TARGET_SAMPLE_RATE = 24000
@@ -59,11 +58,13 @@ def convert_wav_to_pcm16_24khz(wav_data: bytes) -> bytes:
 
             logger.info(
                 "Processing WAV file for Realtime API",
-                channels=n_channels,
-                sample_width_bytes=sample_width,
-                frame_rate=frame_rate,
-                n_frames=n_frames,
-                duration_seconds=n_frames / frame_rate if frame_rate > 0 else 0,
+                extra={
+                    "channels": n_channels,
+                    "sample_width_bytes": sample_width,
+                    "frame_rate": frame_rate,
+                    "n_frames": n_frames,
+                    "duration_seconds": n_frames / frame_rate if frame_rate > 0 else 0,
+                },
             )
 
             # Read all frames
@@ -79,12 +80,12 @@ def convert_wav_to_pcm16_24khz(wav_data: bytes) -> bytes:
         # 8-bit unsigned to 16-bit signed
         raw_data = _convert_8bit_to_16bit(raw_data)
         sample_width = 2
-        logger.info("Converted 8-bit to 16-bit audio")
+        logger.info("Converted 8-bit to 16-bit audio", extra={})
     elif sample_width == 4:
         # 32-bit to 16-bit (truncate precision)
         raw_data = _convert_32bit_to_16bit(raw_data, n_channels)
         sample_width = 2
-        logger.info("Converted 32-bit to 16-bit audio")
+        logger.info("Converted 32-bit to 16-bit audio", extra={})
     elif sample_width != 2:
         raise AudioFormatError(f"Unsupported sample width: {sample_width} bytes")
 
@@ -92,7 +93,7 @@ def convert_wav_to_pcm16_24khz(wav_data: bytes) -> bytes:
     if n_channels == 2:
         raw_data = _convert_stereo_to_mono(raw_data)
         n_channels = 1
-        logger.info("Converted stereo to mono")
+        logger.info("Converted stereo to mono", extra={})
     elif n_channels != 1:
         raise AudioFormatError(f"Unsupported channel count: {n_channels}")
 
@@ -100,16 +101,20 @@ def convert_wav_to_pcm16_24khz(wav_data: bytes) -> bytes:
     if frame_rate != TARGET_SAMPLE_RATE:
         logger.info(
             "Resampling audio",
-            source_rate=frame_rate,
-            target_rate=TARGET_SAMPLE_RATE,
+            extra={
+                "source_rate": frame_rate,
+                "target_rate": TARGET_SAMPLE_RATE,
+            },
         )
         raw_data = _resample_linear(raw_data, frame_rate, TARGET_SAMPLE_RATE)
 
     logger.info(
         "Audio conversion complete",
-        output_bytes=len(raw_data),
-        output_samples=len(raw_data) // 2,
-        output_duration_seconds=round(len(raw_data) / 2 / TARGET_SAMPLE_RATE, 2),
+        extra={
+            "output_bytes": len(raw_data),
+            "output_samples": len(raw_data) // 2,
+            "output_duration_seconds": round(len(raw_data) / 2 / TARGET_SAMPLE_RATE, 2),
+        },
     )
 
     return raw_data
@@ -124,7 +129,7 @@ def _convert_8bit_to_16bit(data: bytes) -> bytes:
     return struct.pack(f"<{len(samples_16bit)}h", *samples_16bit)
 
 
-def _convert_32bit_to_16bit(data: bytes, n_channels: int) -> bytes:
+def _convert_32bit_to_16bit(data: bytes, _n_channels: int) -> bytes:
     """Convert 32-bit signed PCM to 16-bit signed PCM (little-endian)."""
     n_samples = len(data) // 4
     # WAV files are little-endian
@@ -211,30 +216,19 @@ def detect_audio_format(data: bytes) -> str:
     Returns:
         Format string: "wav", "webm", "ogg", "mp3", "flac", or "unknown"
     """
-    if len(data) < 12:
-        return "unknown"
-
-    # WAV: RIFF....WAVE
-    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
-        return "wav"
-
-    # WebM/Matroska: EBML header (1A 45 DF A3)
-    if data[:4] == b"\x1a\x45\xdf\xa3":
-        return "webm"
-
-    # OGG: OggS
-    if data[:4] == b"OggS":
-        return "ogg"
-
-    # MP3: ID3 tag or frame sync
-    if data[:3] == b"ID3" or (data[0] == 0xFF and (data[1] & 0xE0) == 0xE0):
-        return "mp3"
-
-    # FLAC: fLaC
-    if data[:4] == b"fLaC":
-        return "flac"
-
-    return "unknown"
+    result = "unknown"
+    if len(data) >= 12:
+        if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+            result = "wav"
+        elif data[:4] == b"\x1a\x45\xdf\xa3":
+            result = "webm"
+        elif data[:4] == b"OggS":
+            result = "ogg"
+        elif data[:3] == b"ID3" or (data[0] == 0xFF and (data[1] & 0xE0) == 0xE0):
+            result = "mp3"
+        elif data[:4] == b"fLaC":
+            result = "flac"
+    return result
 
 
 def is_wav_file(data: bytes) -> bool:
@@ -251,8 +245,10 @@ def is_wav_file(data: bytes) -> bool:
     if audio_format == "wav":
         logger.info(
             "Detected WAV file",
-            file_size=len(data),
-            header_preview=data[:12].hex(),
+            extra={
+                "file_size": len(data),
+                "header_preview": data[:12].hex(),
+            },
         )
         return True
 
@@ -260,16 +256,20 @@ def is_wav_file(data: bytes) -> bool:
     if audio_format in ("webm", "ogg", "mp3", "flac"):
         logger.error(
             "Unsupported audio format detected",
-            detected_format=audio_format,
-            file_size=len(data),
-            header_preview=data[:12].hex(),
-            hint="Please convert to WAV format (mono, 16-bit PCM, preferably 24kHz)",
+            extra={
+                "detected_format": audio_format,
+                "file_size": len(data),
+                "header_preview": data[:12].hex(),
+                "hint": "Please convert to WAV format (mono, 16-bit PCM, preferably 24kHz)",
+            },
         )
     else:
         logger.warning(
             "Unknown audio format",
-            file_size=len(data),
-            header_preview=data[:12].hex() if len(data) >= 12 else data.hex(),
+            extra={
+                "file_size": len(data),
+                "header_preview": data[:12].hex() if len(data) >= 12 else data.hex(),
+            },
         )
 
     return False

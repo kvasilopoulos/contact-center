@@ -1,12 +1,12 @@
 """Classification endpoint."""
 
 import json
+import logging
 import time
 from typing import Any
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
-import structlog
 
 from app.config import Settings, get_settings
 from app.schemas import (
@@ -21,7 +21,7 @@ from app.telemetry import record_classification
 from app.workflows import InformationalWorkflow, SafetyComplianceWorkflow, ServiceActionWorkflow
 from app.workflows.base import WorkflowResult
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # Optional: wrap handlers with @observe() so production telemetry (Confident AI) gets traces
 try:
@@ -78,9 +78,11 @@ async def classify_message(
 
     logger.info(
         "Classification request received",
-        request_id=request_id,
-        channel=payload.channel,
-        message_length=len(payload.message),
+        extra={
+            "request_id": request_id,
+            "channel": payload.channel,
+            "message_length": len(payload.message),
+        },
     )
 
     try:
@@ -130,8 +132,7 @@ async def classify_message(
     except ClassificationError as e:
         logger.error(
             "Classification failed",
-            request_id=request_id,
-            error=str(e),
+            extra={"request_id": request_id, "error": str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -178,9 +179,11 @@ async def classify_voice_message(
 
     logger.info(
         "Voice classification request received",
-        request_id=request_id,
-        filename=audio_file.filename,
-        content_type=audio_file.content_type,
+        extra={
+            "request_id": request_id,
+            "filename": audio_file.filename,
+            "content_type": audio_file.content_type,
+        },
     )
 
     # Parse optional metadata JSON
@@ -191,8 +194,7 @@ async def classify_voice_message(
         except json.JSONDecodeError as e:
             logger.warning(
                 "Invalid metadata JSON for voice classification",
-                request_id=request_id,
-                error=str(e),
+                extra={"request_id": request_id, "error": str(e)},
             )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -261,8 +263,7 @@ async def classify_voice_message(
         error_str = str(e)
         logger.error(
             "Voice classification failed",
-            request_id=request_id,
-            error=error_str,
+            extra={"request_id": request_id, "error": error_str},
         )
 
         # Check if this is an unsupported format error (client error, not server error)
@@ -375,10 +376,12 @@ async def submit_feedback(
     # Log feedback for analysis
     logger.info(
         "Classification feedback received",
-        request_id=request_id,
-        feedback_id=feedback_id,
-        correct=feedback.correct,
-        expected_category=feedback.expected_category,
+        extra={
+            "request_id": request_id,
+            "feedback_id": feedback_id,
+            "correct": feedback.correct,
+            "expected_category": feedback.expected_category,
+        },
     )
 
     return FeedbackResponse(

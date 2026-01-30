@@ -3,14 +3,13 @@
 Handles messages requesting actions like ticket creation, order tracking, refunds, etc.
 """
 
+import logging
 import re
 from typing import Any
 
-import structlog
-
 from app.workflows.base import BaseWorkflow, WorkflowResult
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class ServiceActionWorkflow(BaseWorkflow):
@@ -44,9 +43,11 @@ class ServiceActionWorkflow(BaseWorkflow):
         """
         logger.info(
             "Executing service action workflow",
-            message_length=len(message),
-            confidence=confidence,
-            metadata_keys=list(metadata.keys()),
+            extra={
+                "message_length": len(message),
+                "confidence": confidence,
+                "metadata_keys": list(metadata.keys()),
+            },
         )
 
         # Check if escalation is needed
@@ -107,7 +108,7 @@ class ServiceActionWorkflow(BaseWorkflow):
 
         for pattern, intent in intent_patterns:
             if re.search(pattern, message_lower):
-                logger.debug("Intent extracted", intent=intent)
+                logger.debug("Intent extracted", extra={"intent": intent})
                 return intent
 
         return "unknown"

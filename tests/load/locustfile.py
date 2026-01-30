@@ -14,7 +14,6 @@ import random
 
 from locust import HttpUser, between, task
 
-
 # Sample messages for each category
 INFORMATIONAL_MESSAGES = [
     "What is your refund policy?",

@@ -4,16 +4,15 @@ Handles messages involving health/safety concerns, adverse reactions, and medica
 These require special handling for regulatory compliance.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
+import logging
 import re
 from typing import Any, ClassVar
 
-import structlog
-
 from app.workflows.base import BaseWorkflow, WorkflowResult
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class SafetyComplianceWorkflow(BaseWorkflow):
@@ -67,8 +66,10 @@ class SafetyComplianceWorkflow(BaseWorkflow):
         """
         logger.warning(
             "Safety compliance workflow triggered",
-            message_hash=self._hash_message(message),
-            confidence=confidence,
+            extra={
+                "message_hash": self._hash_message(message),
+                "confidence": confidence,
+            },
         )
 
         # Determine severity
@@ -185,12 +186,12 @@ class SafetyComplianceWorkflow(BaseWorkflow):
             Compliance record dictionary.
         """
         record_id = (
-            f"COMP-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{self._hash_message(message)[:8]}"
+            f"COMP-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{self._hash_message(message)[:8]}"
         )
 
         return {
             "id": record_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "category": "safety_compliance",
             "severity": severity,
             "message_hash": self._hash_message(message),
@@ -216,9 +217,11 @@ class SafetyComplianceWorkflow(BaseWorkflow):
         # 3. Create FDA adverse event report if required
         logger.info(
             "Compliance record created",
-            record_id=record["id"],
-            severity=record["severity"],
-            requires_fda_report=record["requires_fda_report"],
+            extra={
+                "record_id": record["id"],
+                "severity": record["severity"],
+                "requires_fda_report": record["requires_fda_report"],
+            },
         )
 
     def _hash_message(self, message: str) -> str:

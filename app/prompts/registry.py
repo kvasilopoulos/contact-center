@@ -1,14 +1,13 @@
 """Prompt registry for managing and retrieving prompt templates."""
 
 from dataclasses import dataclass, field
+import logging
 import random
 from typing import Any
 
-import structlog
-
 from app.prompts.template import PromptTemplate
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -90,16 +89,13 @@ class PromptRegistry:
         if key in self._templates:
             logger.warning(
                 "Overwriting existing prompt template",
-                prompt_id=template.id,
-                version=template.version,
+                extra={"prompt_id": template.id, "version": template.version},
             )
 
         self._templates[key] = template
         logger.debug(
             "Registered prompt template",
-            prompt_id=template.id,
-            version=template.version,
-            key=key,
+            extra={"prompt_id": template.id, "version": template.version, "key": key},
         )
 
         # Set as active if it's the first version for this ID
@@ -107,8 +103,7 @@ class PromptRegistry:
             self._active_versions[template.id] = template.version
             logger.info(
                 "Set as active prompt version (first registered)",
-                prompt_id=template.id,
-                version=template.version,
+                extra={"prompt_id": template.id, "version": template.version},
             )
 
     def get(self, prompt_id: str, version: str | None = None) -> PromptTemplate:
@@ -188,8 +183,7 @@ class PromptRegistry:
         self._active_versions[prompt_id] = version
         logger.info(
             "Set active prompt version",
-            prompt_id=prompt_id,
-            version=version,
+            extra={"prompt_id": prompt_id, "version": version},
         )
 
     def list_versions(self, prompt_id: str) -> list[str]:
@@ -225,10 +219,12 @@ class PromptRegistry:
         self._experiments[experiment.id] = experiment
         logger.info(
             "Added experiment",
-            experiment_id=experiment.id,
-            name=experiment.name,
-            active=experiment.active,
-            variants=[v.name for v in experiment.variants],
+            extra={
+                "experiment_id": experiment.id,
+                "name": experiment.name,
+                "active": experiment.active,
+                "variants": [v.name for v in experiment.variants],
+            },
         )
 
     def get_experiment(self, experiment_id: str) -> ExperimentConfig | None:
@@ -266,8 +262,7 @@ class PromptRegistry:
             if not experiment:
                 logger.warning(
                     "Experiment not found, using active version",
-                    experiment_id=experiment_id,
-                    prompt_id=prompt_id,
+                    extra={"experiment_id": experiment_id, "prompt_id": prompt_id},
                 )
                 template = self.get_active(prompt_id)
                 metadata["version"] = template.version
@@ -277,8 +272,10 @@ class PromptRegistry:
             if not experiment.active:
                 logger.info(
                     "Experiment is inactive, using active version",
-                    experiment_id=experiment_id,
-                    prompt_id=prompt_id,
+                    extra={
+                        "experiment_id": experiment_id,
+                        "prompt_id": prompt_id,
+                    },
                 )
                 template = self.get_active(prompt_id)
                 metadata["version"] = template.version
@@ -294,9 +291,11 @@ class PromptRegistry:
 
             logger.debug(
                 "Selected experiment variant",
-                experiment_id=experiment_id,
-                variant=variant.name,
-                version=variant.version,
+                extra={
+                    "experiment_id": experiment_id,
+                    "variant": variant.name,
+                    "version": variant.version,
+                },
             )
             return template, metadata
 

@@ -4,13 +4,12 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+import logging
 import time
 from types import TracebackType
 from typing import Any, TypeVar
 
-import structlog
-
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -101,8 +100,7 @@ class CircuitBreaker:
 
         logger.info(
             "Circuit breaker state change",
-            old_state=old_state.value,
-            new_state=new_state.value,
+            extra={"old_state": old_state.value, "new_state": new_state.value},
         )
 
     async def __aenter__(self) -> "CircuitBreaker":
@@ -162,9 +160,11 @@ class CircuitBreaker:
 
             logger.warning(
                 "Circuit breaker recorded failure",
-                failure_count=self._failure_count,
-                threshold=self.failure_threshold,
-                error=str(error),
+                extra={
+                    "failure_count": self._failure_count,
+                    "threshold": self.failure_threshold,
+                    "error": str(error),
+                },
             )
 
             if self._state == CircuitState.HALF_OPEN:
@@ -200,7 +200,7 @@ class CircuitBreaker:
         self._transition_to(CircuitState.CLOSED)
         self._failure_count = 0
         self._last_failure_time = 0.0
-        logger.info("Circuit breaker manually reset")
+        logger.info("Circuit breaker manually reset", extra={})
 
     def get_stats(self) -> dict[str, Any]:
         """Get circuit breaker statistics."""

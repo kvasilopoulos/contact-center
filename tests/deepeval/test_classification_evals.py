@@ -11,7 +11,6 @@ Set CONFIDENT_API_KEY for real-time monitoring (results sent to Confident AI).
 
 from unittest.mock import AsyncMock, patch
 
-from deepeval import assert_test
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from fastapi.testclient import TestClient
@@ -20,6 +19,7 @@ import pytest
 from app.config import Settings, get_settings
 from app.main import app
 from app.services.classifier import ClassificationResult
+from deepeval import assert_test
 
 
 @pytest.fixture

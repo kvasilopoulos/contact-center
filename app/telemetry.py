@@ -5,34 +5,32 @@ is recorded as a trace so you get full request/response telemetry and can run
 online evals. No-op when the key is not set.
 """
 
+import logging
 import os
 
-import structlog
+logger = logging.getLogger(__name__)
 
-logger = structlog.get_logger(__name__)
-
-# Only import deepeval when telemetry is enabled to avoid import cost when unused
-_tracing = None
+# Lazy-loaded deepeval tracing (holder avoids global statement)
+_tracing_holder: list[tuple | bool | None] = [None]
 
 
 def _get_tracing():
     """Lazy import deepeval tracing; return None if key not set or import fails."""
-    global _tracing
-    if _tracing is not None:
-        return _tracing
+    if _tracing_holder[0] is not None:
+        return _tracing_holder[0]
     if not os.environ.get("CONFIDENT_API_KEY"):
-        _tracing = False
-        return _tracing
+        _tracing_holder[0] = False
+        return _tracing_holder[0]
     try:
-        from deepeval.tracing import update_current_span
-        from deepeval.test_case import LLMTestCase
+        from deepeval.test_case import LLMTestCase  # noqa: PLC0415
+        from deepeval.tracing import update_current_span  # noqa: PLC0415
 
-        _tracing = (update_current_span, LLMTestCase)
-        return _tracing
+        _tracing_holder[0] = (update_current_span, LLMTestCase)
+        return _tracing_holder[0]
     except ImportError:
-        logger.warning("deepeval not installed; telemetry disabled")
-        _tracing = False
-        return _tracing
+        logger.warning("deepeval not installed; telemetry disabled", extra={})
+        _tracing_holder[0] = False
+        return _tracing_holder[0]
 
 
 def record_classification(
@@ -59,4 +57,4 @@ def record_classification(
             ),
         )
     except Exception as e:
-        logger.warning("telemetry record_classification failed", error=str(e))
+        logger.warning("telemetry record_classification failed", extra={"error": str(e)})

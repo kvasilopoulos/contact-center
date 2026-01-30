@@ -7,16 +7,17 @@ class TestDocumentationEndpoints:
     """Tests for documentation rendering endpoints."""
 
     def test_docs_home_page(self, client: TestClient) -> None:
-        """Test the documentation home page loads."""
-        response = client.get("/")
+        """Test a documentation page loads with docs template."""
+        # Docs are under paths like /solution-design, /architecture; "/" is the landing page
+        response = client.get("/solution-design")
 
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
         assert b"Documentation" in response.content
 
     def test_docs_has_sidebar(self, client: TestClient) -> None:
-        """Test that documentation includes sidebar navigation."""
-        response = client.get("/")
+        """Test that documentation pages include sidebar navigation."""
+        response = client.get("/solution-design")
 
         assert response.status_code == 200
         assert b"sidebar" in response.content.lower()
