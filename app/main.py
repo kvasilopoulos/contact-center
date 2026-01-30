@@ -5,10 +5,13 @@ from contextlib import asynccontextmanager
 import time
 import uuid
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
 import structlog
 
 from app.api.v1 import router as v1_router
@@ -37,6 +40,10 @@ structlog.configure(
 )
 
 logger = structlog.get_logger(__name__)
+
+# Setup templates for landing page
+templates_dir = Path(__file__).parent / "templates"
+templates = Jinja2Templates(directory=str(templates_dir))
 
 
 @asynccontextmanager
@@ -171,8 +178,18 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     )
 
 
+# Landing page route - must be before other routers to take precedence
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def landing_page(request: Request) -> HTMLResponse:
+    """Serve the landing page with navigation cards."""
+    return templates.TemplateResponse(
+        request=request,
+        name="landing.html",
+    )
+
+
 # Include routers
 # API routes must come before docs router to avoid being caught by catch-all
 app.include_router(v1_router)
 app.include_router(ui_router, prefix="", tags=["UI"], include_in_schema=False)
-app.include_router(docs_router, prefix="", tags=["documentation"], include_in_schema=False)
+app.include_router(docs_router, prefix="/docs-pages", tags=["documentation"], include_in_schema=False)
