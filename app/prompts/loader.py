@@ -89,7 +89,7 @@ def parse_prompt_template(data: dict[str, Any], file_path: Path) -> PromptTempla
         else:
             # Default to json_object if invalid type
             response_format = "json_object"
-        
+
         llm_config = LLMConfig(
             temperature=float(llm_config_data.get("temperature", 0.0)),
             max_tokens=int(llm_config_data.get("max_tokens", 500)),
@@ -100,7 +100,6 @@ def parse_prompt_template(data: dict[str, Any], file_path: Path) -> PromptTempla
         # Parse metadata
         metadata_data = data.get("metadata", {})
         metadata = PromptMetadata(
-            author=metadata_data.get("author", ""),
             created=metadata_data.get("created", ""),
             description=metadata_data.get("description", ""),
             tags=metadata_data.get("tags", []),

@@ -22,7 +22,6 @@ class PromptParameter:
 class PromptMetadata:
     """Metadata about a prompt version."""
 
-    author: str = ""
     created: str = ""
     description: str = ""
     tags: list[str] = field(default_factory=list)
@@ -35,7 +34,9 @@ class LLMConfig:
 
     temperature: float = 0.0
     max_tokens: int = 500
-    response_format: str | dict[str, Any] = "json_object"  # Can be "json_object" or structured schema dict
+    response_format: str | dict[str, Any] = (
+        "json_object"  # Can be "json_object" or structured schema dict
+    )
     model: str = ""  # Empty string means use global default from settings
 
 

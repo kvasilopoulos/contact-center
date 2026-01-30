@@ -24,7 +24,6 @@ id: <prompt_identifier>      # Unique ID (e.g., "classification")
 version: <semantic_version>  # Version string (e.g., "1.0.0")
 
 metadata:
-  author: <author_name>
   created: <date>
   description: <description>
   tags: [tag1, tag2]

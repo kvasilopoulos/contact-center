@@ -38,7 +38,7 @@ install-dev:
 
 # Run development server
 run:
-	uv run fastapi dev
+	uv run fastapi dev --port 8001
 
 # Testing
 test:

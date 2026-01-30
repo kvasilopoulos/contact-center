@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.openapi.docs import get_swagger_ui_html
 import structlog
 
 from app.api.v1 import router as v1_router
@@ -95,10 +96,26 @@ app = FastAPI(
         "into categories: informational, service_action, and safety_compliance."
     ),
     lifespan=lifespan,
-    docs_url="/docs",
+    docs_url=None,
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html() -> HTMLResponse:
+    """Serve Swagger UI with a custom favicon."""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - Swagger UI",
+        swagger_favicon_url=(
+            "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' "
+            "fill='none' stroke='%23222' stroke-width='2' stroke-linecap='round' "
+            "stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 "
+            "2 0 0 1 2 2z'/%3E%3Cpath d='M13 8H3'/%3E%3Cpath d='M17 12H3'/%3E%3Cpath "
+            "d='M21 16H3'/%3E%3C/svg%3E"
+        ),
+    )
 
 # CORS middleware
 app.add_middleware(

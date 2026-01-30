@@ -43,7 +43,7 @@ def setup_test_prompts() -> None:
                 PromptParameter(name="message", type="string", description="Message"),
             ],
             llm_config=LLMConfig(temperature=0.0, max_tokens=200, model="gpt-4.1"),
-            metadata=PromptMetadata(author="test", description="Test prompt"),
+            metadata=PromptMetadata(description="Test prompt"),
         )
         registry.register(test_prompt)
 
