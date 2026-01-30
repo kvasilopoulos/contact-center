@@ -8,6 +8,7 @@ import structlog
 from app.config import Settings
 from app.schemas import CategoryType
 from app.services.llm_client import LLMClient, LLMClientError
+from app.utils.pii_redaction import redact_pii
 
 logger = structlog.get_logger(__name__)
 
@@ -102,6 +103,7 @@ class ClassifierService:
                 prompt_version=prompt_metadata.get("version"),
                 prompt_variant=prompt_metadata.get("variant"),
                 model=prompt_metadata.get("model"),
+                message_preview=redact_pii(message[:100]) if len(message) > 100 else redact_pii(message),
             )
 
             return ClassificationResult(

@@ -1,9 +1,9 @@
 # Documentation Sidebar Configuration
-# Add your documentation pages here. Content will be loaded based on these paths.
+# Order: Overview → Architecture → Evaluation (logical presentation flow)
 # Use lowercase with hyphens for URLs
 
 sections:
-  - title: "Solution Design"
+  - title: "Documentation"
     pages:
       - title: "Solution Design"
         path: "solution-design"

@@ -201,12 +201,73 @@ class ErrorResponse(BaseModel):
     )
 
 
+# ============================================================================
+# Feedback Models (for continuous evaluation)
+# ============================================================================
+
+
+class FeedbackRequest(BaseModel):
+    """Request model for classification feedback."""
+
+    correct: bool = Field(
+        ...,
+        description="Whether the classification was correct",
+    )
+    expected_category: CategoryType | None = Field(
+        default=None,
+        description="The expected/correct category if classification was wrong",
+    )
+    comment: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Optional comment explaining the feedback",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "correct": True,
+                },
+                {
+                    "correct": False,
+                    "expected_category": "safety_compliance",
+                    "comment": "Message mentioned health concerns",
+                },
+            ]
+        }
+    }
+
+
+class FeedbackResponse(BaseModel):
+    """Response model for feedback submission."""
+
+    request_id: str = Field(
+        ...,
+        description="The original request ID",
+    )
+    feedback_id: str = Field(
+        ...,
+        description="Unique identifier for this feedback submission",
+    )
+    recorded: bool = Field(
+        default=True,
+        description="Whether the feedback was successfully recorded",
+    )
+    message: str = Field(
+        default="Feedback recorded successfully",
+        description="Status message",
+    )
+
+
 __all__ = [
     "CategoryType",
     "ChannelType",
     "ClassificationRequest",
     "ClassificationResponse",
     "ErrorResponse",
+    "FeedbackRequest",
+    "FeedbackResponse",
     "HealthResponse",
     "NextStepInfo",
 ]

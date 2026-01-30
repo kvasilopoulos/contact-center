@@ -290,6 +290,24 @@
             height: auto;
         }
 
+        /* Horizontal chart row: better real estate for multiple diagrams */
+        .charts-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin: 2rem 0;
+            align-items: flex-start;
+        }
+
+        .charts-row .chart-item {
+            flex: 1 1 360px;
+            min-width: 0;
+        }
+
+        .charts-row .chart-item .mermaid {
+            margin: 0;
+        }
+
         /* Table of Contents */
         .toc {
             width: 220px;

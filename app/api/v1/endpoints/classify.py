@@ -1,6 +1,7 @@
 """Classification endpoint."""
 
 import json
+import time
 from typing import Any
 import uuid
 
@@ -8,7 +9,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 import structlog
 
 from app.config import Settings, get_settings
-from app.schemas import ClassificationRequest, ClassificationResponse, NextStepInfo
+from app.schemas import (
+    ClassificationRequest,
+    ClassificationResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+    NextStepInfo,
+)
 from app.services.classifier import ClassificationError, ClassifierService
 from app.telemetry import record_classification
 from app.workflows import InformationalWorkflow, SafetyComplianceWorkflow, ServiceActionWorkflow
@@ -111,6 +118,8 @@ async def classify_message(
             prompt_variant=result.prompt_variant,
             model=result.model,
         )
+
+        # Record telemetry for DeepEval / Confident AI
         record_classification(
             input_message=payload.message,
             channel=payload.channel,
@@ -296,7 +305,6 @@ async def _execute_workflow(
     Returns:
         WorkflowResult with next step information.
     """
-
     workflows = {
         "informational": InformationalWorkflow(),
         "service_action": ServiceActionWorkflow(),
@@ -318,3 +326,87 @@ async def _execute_workflow(
         confidence=confidence,
         metadata=metadata,
     )
+
+
+# In-memory feedback storage (replace with database in production)
+_feedback_store: dict[str, dict[str, Any]] = {}
+
+
+@router.post(
+    "/classify/{request_id}/feedback",
+    response_model=FeedbackResponse,
+    summary="Submit Classification Feedback",
+    description=(
+        "Submit feedback on a classification result to help improve model quality. "
+        "This feedback is used for continuous evaluation and model improvement."
+    ),
+    responses={
+        200: {"description": "Feedback recorded successfully"},
+        404: {"description": "Request ID not found"},
+        422: {"description": "Validation error in request"},
+    },
+)
+async def submit_feedback(
+    request_id: str,
+    feedback: FeedbackRequest,
+) -> FeedbackResponse:
+    """Submit feedback on a classification result.
+
+    This endpoint allows users to indicate whether a classification was correct
+    and optionally provide the expected category if it was incorrect.
+    This data is used for:
+    - Continuous evaluation metrics
+    - Model quality monitoring
+    - Identifying areas for prompt improvement
+    """
+    feedback_id = str(uuid.uuid4())
+
+    # Store feedback (in production, this would go to a database)
+    feedback_data = {
+        "request_id": request_id,
+        "feedback_id": feedback_id,
+        "correct": feedback.correct,
+        "expected_category": feedback.expected_category,
+        "comment": feedback.comment,
+        "timestamp": time.time(),
+    }
+    _feedback_store[request_id] = feedback_data
+
+    # Log feedback for analysis
+    logger.info(
+        "Classification feedback received",
+        request_id=request_id,
+        feedback_id=feedback_id,
+        correct=feedback.correct,
+        expected_category=feedback.expected_category,
+    )
+
+    return FeedbackResponse(
+        request_id=request_id,
+        feedback_id=feedback_id,
+        recorded=True,
+        message="Feedback recorded successfully. Thank you for helping improve our service.",
+    )
+
+
+@router.get(
+    "/classify/{request_id}/feedback",
+    response_model=dict[str, Any],
+    summary="Get Classification Feedback",
+    description="Retrieve feedback submitted for a specific classification request.",
+    responses={
+        200: {"description": "Feedback retrieved successfully"},
+        404: {"description": "No feedback found for this request"},
+    },
+)
+async def get_feedback(request_id: str) -> dict[str, Any]:
+    """Retrieve feedback for a classification request."""
+    if request_id not in _feedback_store:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "feedback_not_found",
+                "message": f"No feedback found for request {request_id}",
+            },
+        )
+    return _feedback_store[request_id]
