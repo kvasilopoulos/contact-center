@@ -64,15 +64,15 @@ security:
 # Run all checks
 check: lint type-check test
 
-# Docker commands
+# Docker
 docker-build:
-	docker build -f docker/Dockerfile -t contact-center-orchestrator:latest .
+	docker build -t cost-center-orchestrator:latest .
 
 docker-run:
-	docker-compose -f docker/docker-compose.yml up --build
+	docker-compose up --build
 
 docker-down:
-	docker-compose -f docker/docker-compose.yml down
+	docker-compose down
 
 # Tunnel with Netlify DNS auto-update
 tunnel:

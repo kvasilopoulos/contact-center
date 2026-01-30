@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy to'
+        description: "Environment to deploy to"
         required: true
-        default: 'staging'
+        default: "staging"
         type: choice
         options:
           - staging
@@ -62,7 +62,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: docker/Dockerfile
+          file: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -74,9 +74,9 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: false  # Skipped – re-enable when ready to deploy
+    if: false # Skipped – re-enable when ready to deploy
     environment:
-      name: staging
+      name: production
       url: ${{ steps.deploy.outputs.alb_url }}
 
     permissions:
