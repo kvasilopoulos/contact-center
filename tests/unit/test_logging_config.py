@@ -5,7 +5,7 @@ import json
 import logging
 import sys
 
-from app.logging_config import JsonFormatter, configure_logging
+from app.core import JsonFormatter, configure_logging
 
 
 def test_json_formatter_outputs_valid_json_one_object_per_line() -> None:

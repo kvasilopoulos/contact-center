@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 import pytest
 
-from app.config import Settings, get_settings
+from app.core import Settings, get_settings
 from app.main import app
 from app.prompts import get_registry, load_prompts
 from app.prompts.template import LLMConfig, PromptMetadata, PromptParameter, PromptTemplate

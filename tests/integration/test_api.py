@@ -182,8 +182,8 @@ class TestOpenAPIDocumentation:
         assert "paths" in data
 
     def test_docs_available(self, client: TestClient) -> None:
-        """Test that Swagger UI is available."""
-        response = client.get("/docs")
+        """Test that Swagger UI is available at /swagger."""
+        response = client.get("/swagger")
         assert response.status_code == 200
 
     def test_redoc_available(self, client: TestClient) -> None:
