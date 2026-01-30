@@ -25,21 +25,6 @@ dependencies = [
     "deepeval>=1.0.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pytest-asyncio>=0.23.0",
-    "httpx>=0.26.0",
-    "ruff>=0.2.0",
-    "ty>=0.0.13",
-    "pre-commit>=3.6.0",
-    "bandit>=1.7.0",
-    "deepeval>=1.0.0",
-    "locust>=2.20.0",
-]
-
-
 # Development dependencies
 [dependency-groups]
 dev = [

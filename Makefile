@@ -33,7 +33,7 @@ install:
 	uv sync --no-dev
 
 install-dev:
-	uv sync
+	uv sync --group dev
 	pre-commit install
 
 # Run development server
