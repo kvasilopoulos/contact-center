@@ -31,10 +31,23 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
-# Use hardcoded default VPC values to avoid permission issues
+# Use default VPC if vpc_id is not provided
+data "aws_vpc" "default" {
+  count   = var.vpc_id == "" ? 1 : 0
+  default = true
+}
+
+data "aws_subnets" "default" {
+  count = var.vpc_id == "" ? 1 : 0
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default[0].id]
+  }
+}
+
 locals {
-  vpc_id     = "vpc-0960a788dd66d9c38"
-  subnet_ids = ["subnet-0f53b58715612ac1c", "subnet-042ed2c8d3dc88f88", "subnet-0003592d2289f96e5", "subnet-09f0d76cc3a648c33", "subnet-01176dd8fd12eaf54", "subnet-0bae523ba58546c23"]
+  vpc_id     = var.vpc_id != "" ? var.vpc_id : data.aws_vpc.default[0].id
+  subnet_ids = length(var.subnet_ids) > 0 ? var.subnet_ids : data.aws_subnets.default[0].ids
 }
 
 # ============================================

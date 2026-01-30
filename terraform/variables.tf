@@ -15,6 +15,22 @@ variable "project_name" {
 }
 
 # ============================================
+# Network Configuration
+# ============================================
+
+variable "vpc_id" {
+  description = "VPC ID (leave empty to use default VPC)"
+  type        = string
+  default     = ""
+}
+
+variable "subnet_ids" {
+  description = "List of subnet IDs (leave empty to use all subnets in the VPC)"
+  type        = list(string)
+  default     = []
+}
+
+# ============================================
 # Container Configuration
 # ============================================
 
