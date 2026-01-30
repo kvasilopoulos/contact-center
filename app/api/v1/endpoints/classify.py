@@ -2,36 +2,37 @@
 
 import json
 import logging
-import time
+import os
 from typing import Any
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
-from app.config import Settings, get_settings
-from app.schemas import (
-    ClassificationRequest,
-    ClassificationResponse,
-    FeedbackRequest,
-    FeedbackResponse,
-    NextStepInfo,
-)
+from app.core import Settings, get_settings, record_classification
+from app.schemas import ClassificationRequest, ClassificationResponse, NextStepInfo
 from app.services.classifier import ClassificationError, ClassifierService
-from app.telemetry import record_classification
-from app.workflows import InformationalWorkflow, SafetyComplianceWorkflow, ServiceActionWorkflow
-from app.workflows.base import WorkflowResult
+from app.services.workflow_router import execute_workflow
 
 logger = logging.getLogger(__name__)
 
 # Optional: wrap handlers with @observe() so production telemetry (Confident AI) gets traces
-try:
-    from deepeval.tracing import observe as _observe
+# Only activate when CONFIDENT_API_KEY is set (production mode)
+_CONFIDENT_API_KEY = os.environ.get("CONFIDENT_API_KEY")
 
-    _observe_decorator = _observe()
-except Exception:
 
-    def _observe_decorator(f):  # no-op when deepeval unavailable
-        return f
+def _observe_decorator(f):
+    """No-op decorator by default."""
+    return f
+
+
+if _CONFIDENT_API_KEY:
+    try:
+        from deepeval.tracing import observe as _observe
+
+        _observe_decorator = _observe()
+        logger.info("DeepEval telemetry enabled (CONFIDENT_API_KEY set)")
+    except Exception as e:
+        logger.warning(f"DeepEval tracing unavailable: {e}")
 
 
 router = APIRouter(tags=["Classification"])
@@ -93,7 +94,7 @@ async def classify_message(
         )
 
         # Execute the appropriate workflow
-        workflow_result = await _execute_workflow(
+        workflow_result = await execute_workflow(
             category=result.category,
             message=payload.message,
             confidence=result.confidence,
@@ -225,7 +226,7 @@ async def classify_voice_message(
         )
 
         # Execute the appropriate workflow
-        workflow_result = await _execute_workflow(
+        workflow_result = await execute_workflow(
             category=result.category,
             message="voice_message",  # We do not expose transcription; message is placeholder
             confidence=result.confidence,
@@ -287,129 +288,3 @@ async def classify_voice_message(
                 "request_id": request_id,
             },
         ) from e
-
-
-async def _execute_workflow(
-    category: str,
-    message: str,
-    confidence: float,
-    metadata: dict[str, Any],
-) -> WorkflowResult:
-    """Execute the appropriate workflow based on category.
-
-    Args:
-        category: The classified category.
-        message: The original message.
-        confidence: Classification confidence score.
-        metadata: Additional metadata.
-
-    Returns:
-        WorkflowResult with next step information.
-    """
-    workflows = {
-        "informational": InformationalWorkflow(),
-        "service_action": ServiceActionWorkflow(),
-        "safety_compliance": SafetyComplianceWorkflow(),
-    }
-
-    workflow = workflows.get(category)
-    if workflow is None:
-        # Fallback for unknown categories
-        return WorkflowResult(
-            action="escalate_to_agent",
-            description="Unknown category - routing to human agent",
-            priority="medium",
-            external_system=None,
-        )
-
-    return await workflow.execute(
-        message=message,
-        confidence=confidence,
-        metadata=metadata,
-    )
-
-
-# In-memory feedback storage (replace with database in production)
-_feedback_store: dict[str, dict[str, Any]] = {}
-
-
-@router.post(
-    "/classify/{request_id}/feedback",
-    response_model=FeedbackResponse,
-    summary="Submit Classification Feedback",
-    description=(
-        "Submit feedback on a classification result to help improve model quality. "
-        "This feedback is used for continuous evaluation and model improvement."
-    ),
-    responses={
-        200: {"description": "Feedback recorded successfully"},
-        404: {"description": "Request ID not found"},
-        422: {"description": "Validation error in request"},
-    },
-)
-async def submit_feedback(
-    request_id: str,
-    feedback: FeedbackRequest,
-) -> FeedbackResponse:
-    """Submit feedback on a classification result.
-
-    This endpoint allows users to indicate whether a classification was correct
-    and optionally provide the expected category if it was incorrect.
-    This data is used for:
-    - Continuous evaluation metrics
-    - Model quality monitoring
-    - Identifying areas for prompt improvement
-    """
-    feedback_id = str(uuid.uuid4())
-
-    # Store feedback (in production, this would go to a database)
-    feedback_data = {
-        "request_id": request_id,
-        "feedback_id": feedback_id,
-        "correct": feedback.correct,
-        "expected_category": feedback.expected_category,
-        "comment": feedback.comment,
-        "timestamp": time.time(),
-    }
-    _feedback_store[request_id] = feedback_data
-
-    # Log feedback for analysis
-    logger.info(
-        "Classification feedback received",
-        extra={
-            "request_id": request_id,
-            "feedback_id": feedback_id,
-            "correct": feedback.correct,
-            "expected_category": feedback.expected_category,
-        },
-    )
-
-    return FeedbackResponse(
-        request_id=request_id,
-        feedback_id=feedback_id,
-        recorded=True,
-        message="Feedback recorded successfully. Thank you for helping improve our service.",
-    )
-
-
-@router.get(
-    "/classify/{request_id}/feedback",
-    response_model=dict[str, Any],
-    summary="Get Classification Feedback",
-    description="Retrieve feedback submitted for a specific classification request.",
-    responses={
-        200: {"description": "Feedback retrieved successfully"},
-        404: {"description": "No feedback found for this request"},
-    },
-)
-async def get_feedback(request_id: str) -> dict[str, Any]:
-    """Retrieve feedback for a classification request."""
-    if request_id not in _feedback_store:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "feedback_not_found",
-                "message": f"No feedback found for request {request_id}",
-            },
-        )
-    return _feedback_store[request_id]
