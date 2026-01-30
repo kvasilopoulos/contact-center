@@ -1,115 +1,144 @@
 # System Architecture
 
-Scalable FastAPI service that classifies customer messages using AI and routes them through category-specific workflows. This page is the single source for architecture and flow; see [Solution Design](solution-design) for design rationale and [Evaluation & Testing](evaluation) for test strategy and results.
+Scalable FastAPI service that classifies customer messages using AI and routes them through category-specific workflows. See [Solution Design](solution-design) for rationale and [Evaluation & Testing](evaluation) for test strategy and results.
 
 ## 1. Component Overview & Classification Flow
 
-<div class="charts-row">
-<div class="chart-item">
+### Pipeline (left → right)
 
-**Components**
+End-to-end flow in one horizontal view: clients → load balancer → gateway → classifier → workflows → external systems.
 
 ```mermaid
-graph TB
-    subgraph Clients["Client Channels"]
-        Chat[Chat Widget]
-        Voice[Voice IVR]
-        Mail[Mail Parser]
-        API[API Client]
+graph LR
+    subgraph Clients["Clients"]
+        C1[Chat]
+        C2[Voice]
+        C3[Mail]
+        C4[API]
     end
-    
-    subgraph LB["Load Balancer"]
-        ALB[Application Load Balancer]
+
+    ALB[ALB]
+    RL[Rate Limit]
+    CB[Circuit Breaker]
+    Classifier[Classifier]
+    LLM[LLM]
+
+    subgraph Workflows["Workflows"]
+        Info[Informational]
+        Svc[Service Action]
+        Safety[Safety]
     end
-    
-    subgraph Service["Orchestrator Service"]
-        RateLimit[Rate Limiting]
-        CircuitBreaker[Circuit Breaker]
-        Logger[Structured Logging]
-        Health[health endpoint]
-        Ready[ready endpoint]
-        Classify[classify endpoint]
-        Classifier[Classifier Service]
-        LLMClient[LLM Client]
-        Info[Informational Workflow]
-        ServiceAction[Service Action Workflow]
-        Safety[Safety Compliance Workflow]
+
+    subgraph External["External"]
+        OpenAI[OpenAI]
+        KB[KB]
+        Ticketing[Ticketing]
+        Compliance[Compliance]
     end
-    
-    subgraph External["External Systems"]
-        OpenAI[OpenAI API]
-        KB[Knowledge Base]
-        Ticketing[Ticketing System]
-        Compliance[Compliance System]
-    end
-    
+
     Clients --> ALB
-    ALB --> Classify
-    Classify --> RateLimit
-    RateLimit --> CircuitBreaker
-    CircuitBreaker --> Logger
-    Logger --> Classifier
-    Classifier --> LLMClient
-    LLMClient --> OpenAI
-    Classifier --> Info
-    Classifier --> ServiceAction
-    Classifier --> Safety
+    ALB --> RL
+    RL --> CB
+    CB --> Classifier
+    Classifier --> LLM
+    LLM --> OpenAI
+    Classifier --> Workflows
     Info --> KB
-    ServiceAction --> Ticketing
+    Svc --> Ticketing
     Safety --> Compliance
 ```
 
-</div>
-<div class="chart-item">
+### Request path (horizontal)
 
-**Classification flow**
+What happens inside the orchestrator for each classify request:
 
 ```mermaid
-flowchart TD
-    Start([Incoming Message]) --> Validate{Validate Input}
-    Validate -->|Invalid| Error[Return 400 Error]
-    Validate -->|Valid| Classify[Classifier Service]
-    
-    Classify --> Format[Format Prompt]
-    Format --> LLM[OpenAI API Call]
-    
-    LLM -->|Success| Parse[Parse Response]
-    LLM -->|Error| Retry{Retry Logic}
-    Retry -->|Success| Parse
-    Retry -->|Failed| CircuitBreaker[Open Circuit Breaker]
-    
-    Parse --> Route{Route to Workflow}
-    Route -->|informational| InfoFlow[Informational]
-    Route -->|service_action| ServiceFlow[Service Action]
-    Route -->|safety_compliance| SafetyFlow[Safety Compliance]
-    
-    InfoFlow --> Response[Build Response]
-    ServiceFlow --> Response
-    SafetyFlow --> Response
-    
-    Response --> Return([Return to Client])
+flowchart LR
+    Start([Request]) --> Validate{Valid?}
+    Validate -->|No| Err[400]
+    Validate -->|Yes| RL[Rate Limit]
+    RL --> CB[Circuit Breaker]
+    CB --> Classifier[Classifier]
+    Classifier --> LLM[OpenAI]
+    LLM --> Parse[Parse]
+    Parse --> Route{Route}
+    Route -->|info| Info[Informational]
+    Route -->|action| Svc[Service Action]
+    Route -->|safety| Safety[Safety]
+    Info --> Resp[Response]
+    Svc --> Resp
+    Safety --> Resp
+    Resp --> Out([JSON])
 ```
 
-</div>
-</div>
+### Classification flow (step-by-step)
+
+Same logic as above, with branches and error handling:
+
+```mermaid
+flowchart LR
+    A([Incoming Message]) --> B{Validate}
+    B -->|Invalid| E1[400 Error]
+    B -->|Valid| C[Format Prompt]
+    C --> D[OpenAI Call]
+    D --> F{Success?}
+    F -->|No| G{Retry}
+    G -->|OK| H[Parse]
+    G -->|Fail| O[Circuit Open]
+    F -->|Yes| H
+    H --> I{Route}
+    I -->|informational| J[Informational]
+    I -->|service_action| K[Service Action]
+    I -->|safety_compliance| L[Safety]
+    J --> M[Build Response]
+    K --> M
+    L --> M
+    M --> N([Return])
+```
 
 ## 2. Workflow Execution
 
 | Workflow | Behavior |
 |----------|----------|
 | **Informational** | Confidence ≥0.5 → Search FAQ → Return answer or suggest contact; low confidence → Escalate to human. |
-| **Service Action** | Extract intent → Prepare action template → Return next steps (ticket creation, order tracking, refunds, cancellations). |
+| **Service Action** | Extract intent → Prepare action template → Return next steps (ticket, order tracking, refunds, cancellations). |
 | **Safety Compliance** | Assess severity (Urgent/High/Standard) → Create compliance record → Redact PII. SLAs: 15 min (urgent), 2 h (high), 24 h (standard). |
 
 ## 3. Scalability & Resilience
 
-- **Horizontal scaling**: Auto-scaling 2–10 tasks (CPU/memory); load balancer with health checks; stateless instances.
-- **Spike handling**: Rate limiting (token bucket, 60 req/min), circuit breaker (fail-fast on LLM errors), async FastAPI, connection pooling.
+- **Horizontal scaling:** Auto-scaling 2–10 tasks (CPU/memory); load balancer with health checks; stateless instances.
+- **Spike handling:** Rate limiting (token bucket, 60 req/min), circuit breaker (fail-fast on LLM errors), async FastAPI, connection pooling.
 
-## 4. Monitoring, Security & CI/CD
+## 4. API Endpoints
 
-- **Metrics**: Request latency, confidence/category distribution, LLM errors, circuit breaker state.
-- **Logging**: Structured JSON, request ID tracing, PII redaction.
-- **Health**: `/api/v1/health` (liveness), `/api/v1/ready` (readiness).
-- **Security**: Input validation (length, channel), PII redaction in safety logs, audit trail, AWS Secrets Manager, private subnets and security groups.
-- **CI/CD**: CI — Lint → Type Check → Tests → Security Scan → Build. CD — Build & Push → Terraform Plan → Deploy ECS → Smoke Tests. Staging on main, Production on version tags.
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/classify` | Classify text message |
+| `POST` | `/api/v1/classify/voice` | Classify audio message |
+| `POST` | `/api/v1/classify/{id}/feedback` | Submit classification feedback |
+| `GET` | `/api/v1/classify/{id}/feedback` | Retrieve feedback |
+| `GET` | `/api/v1/health` | Liveness check |
+| `GET` | `/api/v1/ready` | Readiness check |
+
+**Feedback** (for continuous improvement):
+
+```json
+POST /api/v1/classify/{request_id}/feedback
+{
+  "correct": false,
+  "expected_category": "safety_compliance",
+  "comment": "This message mentions medication side effects"
+}
+```
+
+## 5. Monitoring & Logging
+
+- **Confident AI:** When `CONFIDENT_API_KEY` is set, classifications are traced (input, category, confidence, processing time, model). See `app/core/telemetry.py`.
+- **Structured logging:** JSON logs with request_id, category, confidence, processing_time_ms, PII-redacted message preview.
+
+## 6. Application Flow (Code)
+
+- **Entry:** `main.py` → `create_app()` in `app/factory.py` (middleware, routes, exception handlers).
+- **Core:** Config, logging, telemetry in `app/core/`.
+- **Request path:** Middleware → API (`/api/v1`), docs, or QA UI. Classification: `app/api/v1/endpoints/classify.py` → `ClassifierService` → `app/services/workflow_router.py` → workflows in `app/workflows/`.
+- **Where to look:** App assembly → `app/factory.py`. Classify request → `classify.py` → `ClassifierService` → `workflow_router.py` → workflows.

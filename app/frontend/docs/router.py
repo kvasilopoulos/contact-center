@@ -112,7 +112,7 @@ def render_markdown(content: str) -> str:
 def url_to_file_path(url_path: str) -> str:
     """Convert URL path to file path."""
     file_mappings = {
-        "implementation-plan": "plan/IMPLEMENTATION_PLAN",
+        "implementation-plan": "IMPLEMENTATION_PLAN",
     }
     parts = url_path.split("/")
     converted_parts = []

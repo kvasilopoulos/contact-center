@@ -1,55 +1,61 @@
 # Solution Design
 
-Production-ready FastAPI service that classifies customer messages into three categories (**informational**, **service_action**, **safety_compliance**) using OpenAI GPT-4o-mini, then routes through category-specific workflows. Designed for scalability, reliability, and healthcare compliance.
+Production-ready FastAPI service that classifies customer messages into **informational**, **service_action**, and **safety_compliance** using OpenAI GPT-4o-mini, then routes through category-specific workflows.
 
-**Where to go next**: [System Architecture](architecture) for components and classification flow; [Evaluation & Testing](evaluation) for test strategy and sample results.
+**See also:** [System Architecture](architecture) for flow and components; [Evaluation & Testing](evaluation) for test strategy and results.
 
-## 1. Design Decisions
+## Evaluation Criteria Mapping
+
+| Criteria | Implementation |
+|----------|-----------------|
+| **Scalability** | Stateless FastAPI, auto-scaling ECS (2–10 tasks), token-bucket rate limiting, async I/O |
+| **Code reusability** | Workflow pattern, prompt templating, Pydantic models |
+| **System reliability** | Circuit breaker, retry with backoff, 80%+ test coverage |
+| **Compliance** | PII redaction in logs, input validation, audit logging |
+| **Evaluation** | DeepEval LLM evals, feedback endpoint |
+| **Online monitoring** | Confident AI telemetry, structured logging |
+
+## Design Decisions
 
 | Decision | Rationale | Trade-off |
-|----------|-----------|-----------|
-| **Single LLM Call** | Minimize latency (<500ms p95), reduce costs (~$0.01–0.03/req) | Less sophisticated reasoning; sufficient for clear categories |
-| **Structured JSON Output** | Consistent responses, transparency via decision_path, easier debugging | Requires prompt engineering |
-| **Workflow-Based Routing** | Clear separation, easy to extend, testable | More structure vs. inline logic |
-| **Horizontal Scaling** | Stateless service, FastAPI async, simple load balancing | External LLM dependency |
-| **Safety-First Bias** | Healthcare context requires conservative approach | Higher false positive rate acceptable |
+|----------|-----------|------------|
+| **Single LLM call** | Lower latency (<500ms p95), lower cost | Less complex reasoning; sufficient for clear categories |
+| **Structured JSON output** | Consistent responses, transparent decision_path | Depends on prompt engineering |
+| **Workflow-based routing** | Clear separation, easy to extend, testable | More structure vs. inline logic |
+| **Horizontal scaling** | Stateless service, FastAPI async, simple load balancing | External LLM dependency |
+| **Safety-first bias** | Healthcare context requires conservative handling | Higher false positive rate acceptable |
+| **PII redaction** | HIPAA-style compliance, data protection | Some processing overhead |
 
-## 2. Classification Flow (Summary)
+## Classification Flow (Summary)
 
-Request path: **Validate** → **Rate limit / Circuit breaker** → **Classifier** → **OpenAI** → **Parse** → **Route to workflow** → **Build response**. See the [Classification flow diagram](architecture#1-component-overview--classification-flow) and workflow details in [System Architecture](architecture#2-workflow-execution).
+**Validate** → **Rate limit / circuit breaker** → **Classifier** → **OpenAI** → **Parse** → **Route to workflow** → **Build response**. Details and diagrams: [Architecture → Classification flow](architecture#1-component-overview--classification-flow).
 
-## 3. Scalability & Resilience (Summary)
+## Scalability & Resilience
 
-- **Auto-scaling**: ECS Fargate 2–10 tasks (CPU/memory ~70%).
-- **Spike handling**: Token bucket rate limit (60 req/min), circuit breaker on LLM errors, async I/O, connection pooling.
+- **Auto-scaling:** ECS Fargate 2–10 tasks (CPU/memory ~70%).
+- **Spike handling:** Token-bucket rate limit (60 req/min), circuit breaker on LLM errors, async I/O, connection pooling.
 
-Full details: [System Architecture → Scalability & Resilience](architecture#3-scalability--resilience).
+## Compliance & Security
 
-## 4. Testing, Evaluation & Operations (Summary)
+### PII Redaction
 
-- **Testing**: Unit (80%+), integration (all endpoints), E2E (all categories). Quality gates: coverage >80%, all tests pass, type check, security scan.
-- **Evaluation**: Accuracy, latency, confidence, edge cases — see [Evaluation & Testing](evaluation).
-- **Monitoring & CI/CD**: Metrics, logging, health checks, CI/CD pipeline — see [System Architecture → Monitoring, Security & CI/CD](architecture#4-monitoring-security--cicd).
+| PII Type | Redacted As |
+|----------|-------------|
+| SSN, Email, Phone | `[SSN_REDACTED]`, `[EMAIL_REDACTED]`, etc. |
+| Credit Card, Medical Record, IP | `[CREDIT_CARD_REDACTED]`, etc. |
 
-## 5. Compliance & Security
+Implementation: `app/utils/pii_redaction.py` (regex-based, configurable).
 
-- **Input validation**: Message length (5000 chars), channel (chat/voice/mail).
-- **PII redaction**: Automatic in safety compliance logs.
-- **Audit trail**: Compliance records for safety reports.
-- **Secrets**: AWS Secrets Manager in production.
-- **Network**: ECS tasks in private subnets, security groups.
+### Security Controls
 
-## 6. Assumptions & Trade-offs
+- **Input:** Message length (5000 chars), channel (chat/voice/mail).
+- **Audit:** Compliance records for safety reports.
+- **Secrets:** AWS Secrets Manager in production.
+- **Network:** ECS in private subnets, security groups.
+- **Rate limiting:** 60 req/min to limit abuse.
 
-**Assumptions**
+## Assumptions & Trade-offs
 
-- OpenAI API available/responsive (mitigated with circuit breaker and retry).
-- Single LLM call sufficient accuracy (mitigated with prompt engineering).
-- External systems stubbed (interfaces defined for future integration).
+**Assumptions:** OpenAI API available (mitigated with circuit breaker and retry). Single LLM call sufficient (mitigated with prompt engineering). External systems stubbed (interfaces defined for integration).
 
-**Trade-offs**
-
-- **OpenAI vs local LLM**: Higher accuracy vs. API cost and latency dependency.
-- **Sync vs queue**: Simpler architecture vs. limited burst handling.
-- **Monolith vs microservices**: Easier deployment vs. less granular scaling.
-- **Safety-first bias**: Prevents missed adverse events vs. higher false positive rate.
+**Trade-offs:** OpenAI vs local LLM (accuracy vs cost/latency). Sync vs queue (simpler vs limited burst handling). Safety-first bias (fewer missed safety events vs higher false positives).
