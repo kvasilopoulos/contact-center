@@ -533,10 +533,11 @@
             position: absolute;
             left: 13px;
             top: 28px;
-            bottom: 0;
+            bottom: calc(-0.5rem - 28px);
             width: 2px;
             background: var(--border);
             transition: background 300ms ease;
+            z-index: 0;
         }
 
         .workflow-step.completed:not(:last-child)::before {
@@ -558,6 +559,8 @@
             background: var(--muted);
             border: 2px solid var(--border);
             transition: all 300ms ease;
+            position: relative;
+            z-index: 1;
         }
 
         .step-indicator svg {
@@ -1960,6 +1963,7 @@
         function displayResults(result) {
             document.getElementById('resultsEmpty').style.display = 'none';
             document.getElementById('resultsContent').classList.add('visible');
+            document.querySelector('.results-panel').classList.add('has-results');
 
             // Category
             const badge = document.getElementById('categoryBadge');
@@ -2033,6 +2037,7 @@
             hideError();
             document.getElementById('resultsEmpty').style.display = 'flex';
             document.getElementById('resultsContent').classList.remove('visible');
+            document.querySelector('.results-panel').classList.remove('has-results');
             switchTab('text');
             resetWorkflow();
         }
