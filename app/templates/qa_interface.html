@@ -37,12 +37,15 @@
             min-height: 100vh;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
+            display: flex;
+            flex-direction: column;
         }
 
         .container {
             max-width: 800px;
             margin: 0 auto;
             padding: 2rem 1.5rem;
+            flex: 1;
         }
 
         /* Header */
@@ -620,6 +623,52 @@
             color: #b91c1c;
         }
 
+        .footer {
+            margin-top: auto;
+            padding-top: 1.25rem;
+            padding-bottom: 1rem;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--muted-foreground);
+            font-size: 0.8125rem;
+            background: var(--background);
+        }
+
+        .footer-links {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.5rem 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .footer-links a {
+            color: var(--foreground);
+            text-decoration: none;
+        }
+
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+
+        .footer-credit a {
+            color: var(--foreground);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer-credit a:hover {
+            text-decoration: underline;
+        }
+
+        .footer-disclaimer {
+            font-size: 0.6875rem;
+            color: var(--muted-foreground);
+            max-width: 480px;
+            margin: 0.5rem auto 0;
+            line-height: 1.45;
+        }
+
         /* Responsive */
         @media (max-width: 640px) {
             .container {
@@ -637,6 +686,14 @@
             .processing-info {
                 flex-direction: column;
                 gap: 0.5rem;
+            }
+
+            .footer-links {
+                gap: 0.375rem 0.75rem;
+            }
+
+            .footer-disclaimer {
+                font-size: 0.625rem;
             }
         }
     </style>
@@ -1165,5 +1222,17 @@
             updateCharCount();
         });
     </script>
+
+    <footer class="footer">
+        <div class="footer-links">
+            <a href="/solution-design">Documentation</a>
+            <a href="/ui">UI</a>
+            <a href="/docs">Swagger API</a>
+        </div>
+        <div class="footer-credit">
+            <a href="https://kvasilopoulos.com" target="_blank" rel="noopener noreferrer">kvasilopoulos.com</a>
+        </div>
+        <p class="footer-disclaimer">This is a demo application. AI classifications are for illustrative purposes only and should not be relied upon for production decisions without additional validation.</p>
+    </footer>
 </body>
 </html>
