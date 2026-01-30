@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     min_confidence_threshold: float = 0.5
     max_message_length: int = 5000
 
+    # Production telemetry (Confident AI / DeepEval)
+    confident_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description="Confident AI API key for production monitoring; when set, all classification responses are sent as telemetry.",
+    )
+
     # Rate Limiting
     rate_limit_requests_per_minute: int = 60
 

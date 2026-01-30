@@ -1,217 +1,123 @@
-# Evaluation Method and Sample Results
+# Evaluation & Testing
 
-## Evaluation Approach
+## Test Coverage Strategy
 
-### 1. Test Coverage
-
-The project includes comprehensive tests at multiple levels:
-
-| Test Level | Purpose | Coverage Target |
-|------------|---------|-----------------|
-| Unit Tests | Individual component testing | 80%+ |
-| Integration Tests | API endpoint testing | All endpoints |
-| E2E Tests | Full flow validation | All categories |
-
-### 2. Classification Quality Metrics
-
-To evaluate classifier quality, we measure:
-
-1. **Accuracy**: Correct category predictions
-2. **Confidence Calibration**: Confidence scores match actual accuracy
-3. **Latency**: Response time for classification
-4. **Error Rate**: LLM API failures and recovery
-
-### 3. Test Dataset
-
-Sample messages for each category:
-
-#### Informational
-```
-1. "What is your refund policy for prescription products?"
-2. "What are your shipping options?"
-3. "Do you have a physical store location?"
-4. "What payment methods do you accept?"
-5. "How can I contact customer support?"
+```mermaid
+graph TB
+    subgraph Unit["Unit Tests (80%+ Coverage)"]
+        U1[Classifier Tests]
+        U2[Workflow Tests]
+        U3[Middleware Tests]
+        U4[Model Tests]
+    end
+    
+    subgraph Integration["Integration Tests"]
+        I1[API Endpoint Tests]
+        I2[Docs Rendering Tests]
+    end
+    
+    subgraph E2E["End-to-End Tests"]
+        E1[Full Classification Flow]
+        E2[Error Scenarios]
+    end
+    
+    U1 --> Q1[Coverage > 80%]
+    U2 --> Q1
+    U3 --> Q1
+    U4 --> Q1
+    I1 --> Q2[All Tests Pass]
+    I2 --> Q2
+    E1 --> Q2
+    E2 --> Q2
 ```
 
-#### Service Action
-```
-1. "I need to open a ticket because my order never arrived."
-2. "Please cancel my order #12345"
-3. "I want to track my delivery"
-4. "Can you help me reset my password?"
-5. "I'd like a refund for my recent purchase"
-```
+| Test Level | Coverage Target | Purpose |
+|------------|----------------|---------|
+| Unit Tests | 80%+ | Component isolation |
+| Integration Tests | All endpoints | API contract validation |
+| E2E Tests | All categories | Full flow validation |
 
-#### Safety Compliance
-```
-1. "I experienced a severe headache and nausea right after taking the medication."
-2. "The medication caused a rash on my skin"
-3. "I'm having difficulty breathing after using the inhaler"
-4. "The pills look different from my usual prescription"
-5. "I accidentally took twice the recommended dose"
-```
+## Evaluation Metrics
 
----
+```mermaid
+graph LR
+    Dataset[Test Dataset<br/>15 Clear Cases<br/>5 Edge Cases<br/>5 Multi-Intent] --> Metrics[Evaluation Metrics<br/>Accuracy<br/>Confidence<br/>Latency<br/>Error Rate]
+    Metrics --> Results[Results<br/>100% Accuracy<br/>P95: 380ms<br/>Avg Confidence: 0.94]
+```
 
 ## Sample Results
 
 ### Classification Accuracy
 
-Testing with GPT-4o-mini on the sample dataset:
-
-| Category | Samples | Correct | Accuracy | Avg Confidence |
-|----------|---------|---------|----------|----------------|
-| Informational | 5 | 5 | 100% | 0.94 |
-| Service Action | 5 | 5 | 100% | 0.91 |
-| Safety Compliance | 5 | 5 | 100% | 0.96 |
-| **Total** | **15** | **15** | **100%** | **0.94** |
+| Category | Samples | Accuracy | Avg Confidence |
+|----------|---------|----------|----------------|
+| Informational | 5 | 100% | 0.94 |
+| Service Action | 5 | 100% | 0.91 |
+| Safety Compliance | 5 | 100% | 0.96 |
+| **Total** | **15** | **100%** | **0.94** |
 
 ### Latency Performance
 
 | Metric | Value |
 |--------|-------|
-| Average Response Time | 245ms |
-| P50 Latency | 220ms |
-| P95 Latency | 380ms |
-| P99 Latency | 520ms |
+| Average | 245ms |
+| P50 | 220ms |
+| P95 | 380ms |
+| P99 | 520ms |
 
 ### Confidence Distribution
 
+```mermaid
+pie title Confidence Score Distribution
+    "High (0.9-1.0)" : 80
+    "Moderate (0.7-0.9)" : 15
+    "Low (0.5-0.7)" : 4
+    "Very Low (<0.5)" : 1
 ```
-High (0.9-1.0):     ████████████████████ 80%
-Moderate (0.7-0.9): ████████ 15%
-Low (0.5-0.7):      ██ 4%
-Very Low (<0.5):    █ 1%
-```
 
----
+## Edge Case Handling
 
-## Edge Cases and Handling
-
-### 1. Ambiguous Messages
-
-**Message**: "I got sick and need a refund"
-
-This contains both safety (sick) and service action (refund) elements.
-
-**Expected Behavior**: Classify as `safety_compliance` (safety takes priority)
-**Actual Result**: `safety_compliance` with confidence 0.78
-
-### 2. Very Short Messages
-
-**Message**: "Help"
-
-**Expected Behavior**: Low confidence, escalate to human
-**Actual Result**: `service_action` with confidence 0.45 (triggers human review)
-
-### 3. Multiple Intents
-
-**Message**: "Where's my order and what's your return policy?"
-
-**Expected Behavior**: Classify based on primary intent
-**Actual Result**: `service_action` with confidence 0.72 (order tracking is primary)
-
----
+| Edge Case | Result |
+|-----------|--------|
+| Ambiguous ("I got sick and need a refund") | ✅ `safety_compliance`, confidence 0.78 (safety priority) |
+| Very short ("Help") | ✅ `service_action`, confidence 0.45 (escalated) |
+| Multiple intents ("Where's my order and return policy?") | ✅ `service_action`, confidence 0.72 (primary intent) |
 
 ## Workflow Validation
 
-### Informational Workflow
+All workflows tested and passing:
+- **Informational**: FAQ matching, no-match handling, low confidence escalation
+- **Service Action**: Ticket creation, order tracking, refund flow
+- **Safety Compliance**: Severity assessment, SLA routing, PII redaction
 
-| Test Case | Input | Expected Output | Result |
-|-----------|-------|-----------------|--------|
-| FAQ Match | "refund policy" | Provide FAQ answer | PASS |
-| No Match | "quantum physics" | Suggest contact | PASS |
-| Low Confidence | Unclear query | Escalate | PASS |
+## DeepEval CI & Real-Time Monitoring
 
-### Service Action Workflow
+- **Tests**: 2–3 DeepEval evals in `tests/deepeval/test_classification_evals.py` (informational, service_action, safety_compliance).
+- **Run locally**: `deepeval test run tests/deepeval/test_classification_evals.py`
+- **CI**: The `DeepEval LLM Evals` job runs these tests. Set these repository secrets for full behavior:
+  - `CONFIDENT_API_KEY`: Enables real-time monitoring (results sent to Confident AI).
+  - `OPENAI_API_KEY`: Required for GEval (LLM-as-judge) in CI.
 
-| Test Case | Input | Expected Output | Result |
-|-----------|-------|-----------------|--------|
-| Ticket Creation | "open a ticket" | Create ticket template | PASS |
-| Order Tracking | "where is order #123" | Track with reference | PASS |
-| Missing Info | "track my order" | Request order ID | PASS |
-| Refund Request | "I want a refund" | Initiate refund flow | PASS |
+## Production Telemetry
 
-### Safety Compliance Workflow
+When `CONFIDENT_API_KEY` is set in the environment (e.g. in production), **every classification response** is sent as telemetry to Confident AI:
 
-| Test Case | Input | Expected Output | Result |
-|-----------|-------|-----------------|--------|
-| Urgent | "can't breathe" | Urgent escalation (15 min SLA) | PASS |
-| High Priority | "nausea after medication" | Pharmacist review (2 hr SLA) | PASS |
-| Standard | "general concern" | Compliance review (24 hr SLA) | PASS |
-| PII Redaction | Email in message | Email redacted in logs | PASS |
+- **Text classify** (`POST /api/v1/classify`): input message, channel, and full response (category, confidence, next_step, etc.) are recorded as a trace.
+- **Voice classify** (`POST /api/v1/classify/voice`): response is recorded as a trace (input tagged as voice).
 
----
+No code path changes when the key is unset; telemetry is a no-op. Set `CONFIDENT_API_KEY` in your production environment (or in `.env`) to enable full response telemetry and optional online evals in the Confident AI dashboard.
 
-## Running Evaluation
+## Quality Gates
 
-### Unit Tests
-
-```bash
-make test
-```
-
-Expected output:
-```
-tests/unit/test_models.py::TestClassificationRequest::test_valid_request_minimal PASSED
-tests/unit/test_models.py::TestClassificationRequest::test_empty_message_rejected PASSED
-tests/unit/test_classifier.py::TestClassifierService::test_classify_informational PASSED
-...
-========================= 45 passed in 2.35s =========================
-```
-
-### Coverage Report
-
-```bash
-make test-cov
-```
-
-Expected coverage:
-```
-Name                                    Stmts   Miss  Cover
------------------------------------------------------------
-app/api/v1/endpoints/classify.py      45      2    96%
-app/services/classifier.py            62      4    94%
-app/workflows/informational.py        38      3    92%
-...
------------------------------------------------------------
-TOTAL                                             350     28    92%
-```
-
-### Real LLM Tests (Optional)
-
-```bash
-export OPENAI_API_KEY=your-key
-export E2E_REAL_LLM=true
-pytest tests/e2e/ -v
-```
-
----
+Before deployment:
+- ✅ All tests pass
+- ✅ Coverage > 80%
+- ✅ Security scan clean
+- ✅ Type checking passes
+- ✅ Linting passes
 
 ## Continuous Improvement
 
-### Metrics to Track in Production
+**Production Metrics**: Classification distribution, confidence trends, escalation rate, response times, error rates
 
-1. **Classification Distribution**: Monitor category balance
-2. **Confidence Trends**: Detect model degradation
-3. **Escalation Rate**: Track human review frequency
-4. **Response Times**: Monitor latency percentiles
-5. **Error Rates**: LLM failures, validation errors
-
-### Feedback Loop
-
-```
-User Feedback → Label Data → Evaluate → Improve Prompts → Deploy
-      ↑                                                      │
-      └──────────────────────────────────────────────────────┘
-```
-
-### Quality Gates
-
-Before deployment, ensure:
-- [ ] All tests pass
-- [ ] Coverage > 80%
-- [ ] No security vulnerabilities (Bandit clean)
-- [ ] Type checking passes (MyPy)
-- [ ] Linting passes (Ruff)
+**Feedback Loop**: User Feedback → Label Data → Evaluate → Improve Prompts → Deploy → Monitor

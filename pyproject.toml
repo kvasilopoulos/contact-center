@@ -23,6 +23,7 @@ dependencies = [
     "jinja2>=3.1.0",
     "websockets>=12.0",
     "markdown>=3.5.0",
+    "deepeval>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -35,6 +36,7 @@ dev = [
     "ty>=0.0.13",
     "pre-commit>=3.6.0",
     "bandit>=1.7.0",
+    "deepeval>=1.0.0",
 ]
 
 
@@ -49,6 +51,7 @@ dev = [
     "ty>=0.0.13",
     "pre-commit>=3.6.0",
     "bandit>=1.7.0",
+    "deepeval>=1.0.0",
 ]
 
 # Ruff Configuration - Linting and Formatting
@@ -109,6 +112,9 @@ split-on-trailing-comma = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --cov=app --cov-report=term-missing --cov-report=html"
+markers = [
+    "evaluation: DeepEval LLM evaluation tests",
+]
 
 [tool.coverage.run]
 source = ["app"]

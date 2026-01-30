@@ -128,6 +128,32 @@ jobs:
           MINIMUM_ORANGE: 60
         if: github.event_name == 'pull_request'
 
+  deepeval:
+    name: DeepEval LLM Evals
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run DeepEval tests (real-time monitoring)
+        run: uv run pytest -m evaluation tests/deepeval/ -v
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CONFIDENT_API_KEY: ${{ secrets.CONFIDENT_API_KEY }}
+
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
