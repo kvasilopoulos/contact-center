@@ -78,10 +78,22 @@ def parse_prompt_template(data: dict[str, Any], file_path: Path) -> PromptTempla
 
         # Parse LLM config
         llm_config_data = data.get("llm_config", {})
+        response_format = llm_config_data.get("response_format", "json_object")
+        # Support both string and dict response_format (for structured schemas)
+        if isinstance(response_format, dict):
+            # Keep as dict for structured output schemas
+            pass
+        elif isinstance(response_format, str):
+            # String format (e.g., "json_object")
+            pass
+        else:
+            # Default to json_object if invalid type
+            response_format = "json_object"
+        
         llm_config = LLMConfig(
             temperature=float(llm_config_data.get("temperature", 0.0)),
             max_tokens=int(llm_config_data.get("max_tokens", 500)),
-            response_format=llm_config_data.get("response_format", "json_object"),
+            response_format=response_format,
             model=llm_config_data.get("model", ""),
         )
 

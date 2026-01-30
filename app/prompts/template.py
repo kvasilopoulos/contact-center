@@ -35,7 +35,7 @@ class LLMConfig:
 
     temperature: float = 0.0
     max_tokens: int = 500
-    response_format: str = "json_object"
+    response_format: str | dict[str, Any] = "json_object"  # Can be "json_object" or structured schema dict
     model: str = ""  # Empty string means use global default from settings
 
 

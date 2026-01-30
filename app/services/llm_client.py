@@ -72,6 +72,76 @@ class LLMClient:
             )
         return self._client
 
+    def _build_response_format(self, response_format_config: str | dict[str, Any]) -> dict[str, Any]:
+        """Build response format configuration for OpenAI API.
+        
+        Args:
+            response_format_config: Either "json_object" string or dict with schema definition
+            
+        Returns:
+            Response format dict for OpenAI API
+        """
+        # If it's already a dict (structured schema), use it directly
+        if isinstance(response_format_config, dict):
+            return response_format_config
+        
+        # If it's "json_object", convert to structured output schema
+        if response_format_config == "json_object":
+            return {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "classification_response",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "category": {
+                                "type": "string",
+                                "enum": ["informational", "service_action", "safety_compliance"],
+                            },
+                            "confidence": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
+                            "reasoning": {
+                                "type": "string",
+                            },
+                        },
+                        "required": ["category", "confidence", "reasoning"],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        
+        # Default: use structured output schema
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "classification_response",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "enum": ["informational", "service_action", "safety_compliance"],
+                        },
+                        "confidence": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0,
+                        },
+                        "reasoning": {
+                            "type": "string",
+                        },
+                    },
+                    "required": ["category", "confidence", "reasoning"],
+                    "additionalProperties": False,
+                },
+            },
+        }
+
     async def _do_complete_with_model(
         self,
         model: str,
@@ -79,10 +149,19 @@ class LLMClient:
         user_prompt: str,
         temperature: float,
         max_tokens: int,
+        response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Internal method to perform LLM call with specific model.
 
         This wraps _do_complete but allows specifying a different model.
+        
+        Args:
+            model: Model name to use
+            system_prompt: System prompt text
+            user_prompt: User prompt text
+            temperature: Temperature setting
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format. If None, uses structured output schema.
         """
         try:
             result: dict[str, Any]
@@ -93,6 +172,7 @@ class LLMClient:
                     user_prompt=user_prompt,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    response_format=response_format,
                 )
             return result
         except CircuitBreakerOpen as e:
@@ -119,14 +199,28 @@ class LLMClient:
         user_prompt: str,
         temperature: float,
         max_tokens: int,
+        response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Internal method to perform the actual LLM call with retries."""
+        """Internal method to perform the actual LLM call with retries.
+        
+        Args:
+            model: Model name to use
+            system_prompt: System prompt text
+            user_prompt: User prompt text
+            temperature: Temperature setting
+            max_tokens: Maximum tokens to generate
+            response_format: Optional response format. If None, uses structured output schema.
+        """
         try:
             logger.debug(
                 "Sending LLM request",
                 model=model,
                 user_prompt_length=len(user_prompt),
             )
+
+            # Default to structured output schema if not provided
+            if response_format is None:
+                response_format = self._build_response_format("json_object")
 
             response = await self.client.chat.completions.create(
                 model=model,
@@ -136,7 +230,7 @@ class LLMClient:
                 ],
                 temperature=temperature,
                 max_tokens=max_tokens,
-                response_format={"type": "json_object"},
+                response_format=response_format,
             )
 
             content = response.choices[0].message.content
@@ -242,6 +336,9 @@ class LLMClient:
             model=model_to_use,
         )
 
+        # Build response format from template config
+        response_format = self._build_response_format(template.llm_config.response_format)
+
         # Use LLM config from template with dynamic model
         llm_response = await self._do_complete_with_model(
             model=model_to_use,
@@ -249,6 +346,7 @@ class LLMClient:
             user_prompt=user_prompt,
             temperature=template.llm_config.temperature,
             max_tokens=template.llm_config.max_tokens,
+            response_format=response_format,
         )
 
         # Add model to metadata
