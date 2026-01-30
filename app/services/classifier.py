@@ -144,7 +144,7 @@ class ClassifierService:
 
         try:
             # Call Realtime audio classification
-            result = await self.llm_client.classify_audio_realtime(
+            result, prompt_metadata = await self.llm_client.classify_audio_realtime(
                 audio=audio,
                 channel=channel,
             )
@@ -163,6 +163,8 @@ class ClassifierService:
                     "Invalid category returned by Realtime LLM",
                     category=category,
                     valid_categories=list(valid_categories),
+                    prompt_id=prompt_metadata.get("prompt_id"),
+                    prompt_version=prompt_metadata.get("version"),
                 )
                 # Default to service_action with low confidence for unknown categories
                 category = "service_action"
@@ -180,7 +182,9 @@ class ClassifierService:
                 confidence=confidence,
                 channel=channel,
                 processing_time_ms=round(processing_time_ms, 2),
-                model=self.settings.openai_realtime_model,
+                prompt_id=prompt_metadata.get("prompt_id"),
+                prompt_version=prompt_metadata.get("version"),
+                model=prompt_metadata.get("model"),
             )
 
             return ClassificationResult(
@@ -188,9 +192,9 @@ class ClassifierService:
                 confidence=confidence,
                 reasoning=reasoning,
                 processing_time_ms=processing_time_ms,
-                prompt_version="",
-                prompt_variant="",
-                model=self.settings.openai_realtime_model,
+                prompt_version=prompt_metadata.get("version", ""),
+                prompt_variant=prompt_metadata.get("variant", ""),
+                model=prompt_metadata.get("model", ""),
             )
 
         except LLMClientError as e:

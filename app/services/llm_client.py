@@ -12,12 +12,19 @@ from openai import AsyncOpenAI, OpenAIError
 import structlog
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 import websockets
-from websockets.client import WebSocketClientProtocol
+from websockets.asyncio.client import ClientConnection
+from websockets.exceptions import ConnectionClosed, ConnectionClosedError, ConnectionClosedOK
 
 if TYPE_CHECKING:
     from app.config import Settings
 from app.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from app.prompts import registry
+from app.services.audio_utils import (
+    AudioFormatError,
+    convert_wav_to_pcm16_24khz,
+    detect_audio_format,
+    is_wav_file,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -72,19 +79,21 @@ class LLMClient:
             )
         return self._client
 
-    def _build_response_format(self, response_format_config: str | dict[str, Any]) -> dict[str, Any]:
+    def _build_response_format(
+        self, response_format_config: str | dict[str, Any]
+    ) -> dict[str, Any]:
         """Build response format configuration for OpenAI API.
-        
+
         Args:
             response_format_config: Either "json_object" string or dict with schema definition
-            
+
         Returns:
             Response format dict for OpenAI API
         """
         # If it's already a dict (structured schema), use it directly
         if isinstance(response_format_config, dict):
             return response_format_config
-        
+
         # If it's "json_object", convert to structured output schema
         if response_format_config == "json_object":
             return {
@@ -113,7 +122,7 @@ class LLMClient:
                     },
                 },
             }
-        
+
         # Default: use structured output schema
         return {
             "type": "json_schema",
@@ -154,7 +163,7 @@ class LLMClient:
         """Internal method to perform LLM call with specific model.
 
         This wraps _do_complete but allows specifying a different model.
-        
+
         Args:
             model: Model name to use
             system_prompt: System prompt text
@@ -202,7 +211,7 @@ class LLMClient:
         response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Internal method to perform the actual LLM call with retries.
-        
+
         Args:
             model: Model name to use
             system_prompt: System prompt text
@@ -358,17 +367,21 @@ class LLMClient:
         self,
         audio: bytes,
         channel: str = "voice",
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Classify audio using the Realtime API without explicit transcription.
 
         This method:
         - Creates a Realtime WebSocket session
         - Configures it with the classification system prompt
-        - Sends the audio via input_audio_buffer events
+        - Sends the audio via conversation.item.create
         - Waits for a textual response containing JSON classification
-        - Parses and returns the JSON object
+        - Parses and returns the JSON object with prompt metadata
 
-        The caller is responsible for mapping the JSON into domain models.
+        Returns:
+            Tuple of (classification_result, metadata) where metadata contains:
+                - prompt_id: The prompt ID used
+                - version: The prompt version used
+                - model: The model used
         """
         try:
             async with self._circuit_breaker:
@@ -388,18 +401,45 @@ class LLMClient:
         self,
         audio: bytes,
         channel: str,
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Internal helper to classify audio via Realtime WebSocket."""
         api_key = self.settings.openai_api_key.get_secret_value()
         if not api_key:
             raise LLMClientError("OpenAI API key not configured")
 
-        # Get classification prompt template for system instructions
-        template = registry.get_active("classification")
+        # Get audio-specific classification prompt template for system instructions
+        prompt_id = "classification_audio"
+        try:
+            template = registry.get_active("classification_audio")
+        except KeyError:
+            # Fallback to generic classification prompt if audio-specific one is not configured
+            logger.warning(
+                "Audio classification prompt 'classification_audio' not found, "
+                "falling back to 'classification'",
+            )
+            template = registry.get_active("classification")
+            prompt_id = "classification"
 
-        # System instructions: reuse existing classification system prompt,
+        # Build metadata
+        metadata: dict[str, Any] = {
+            "prompt_id": prompt_id,
+            "version": template.version,
+            "variant": "active",
+        }
+
+        # System instructions: use audio-specific classification system prompt,
         # and explicitly require JSON-only output (already enforced by prompt).
         instructions = template.system_prompt
+
+        # Determine which model to use: template config > global default
+        model_to_use = (
+            template.llm_config.model
+            if template.llm_config.model
+            else self.settings.openai_realtime_model
+        )
+
+        # Add model to metadata
+        metadata["model"] = model_to_use
 
         # Small text preamble to give the model context about the channel.
         input_text = (
@@ -407,10 +447,42 @@ class LLMClient:
             "Listen to the audio and classify it according to the instructions."
         )
 
-        # Base64-encode the audio; assume client sends a WAV file.
-        audio_b64 = base64.b64encode(audio).decode("ascii")
+        # Convert audio to required format: mono PCM16 at 24kHz
+        # OpenAI Realtime API expects raw PCM data, not WAV with headers
+        try:
+            audio_format = detect_audio_format(audio)
 
-        url = f"wss://api.openai.com/v1/realtime?model={self.settings.openai_realtime_model}"
+            if audio_format == "wav":
+                pcm_audio = convert_wav_to_pcm16_24khz(audio)
+                logger.info(
+                    "Converted WAV to PCM16 24kHz",
+                    input_bytes=len(audio),
+                    output_bytes=len(pcm_audio),
+                )
+            elif audio_format in ("webm", "ogg", "mp3", "flac"):
+                # These formats require external tools (ffmpeg) to convert
+                raise LLMClientError(
+                    f"Unsupported audio format: {audio_format}. "
+                    "Please upload audio in WAV format (mono, 16-bit PCM, preferably 24kHz). "
+                    "Browser recordings typically use WebM/Opus which requires server-side "
+                    "conversion tools not currently available."
+                )
+            elif audio_format == "unknown":
+                # Could be raw PCM - try to use it directly but warn
+                logger.warning(
+                    "Unknown audio format, attempting to use as raw PCM16 at 24kHz",
+                    input_bytes=len(audio),
+                )
+                pcm_audio = audio
+            else:
+                pcm_audio = audio
+        except AudioFormatError as e:
+            raise LLMClientError(f"Audio format conversion failed: {e}") from e
+
+        # Base64-encode the raw PCM audio
+        audio_b64 = base64.b64encode(pcm_audio).decode("ascii")
+
+        url = f"wss://api.openai.com/v1/realtime?model={model_to_use}"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "OpenAI-Beta": "realtime=v1",
@@ -418,53 +490,95 @@ class LLMClient:
 
         logger.debug(
             "Opening Realtime WebSocket for audio classification",
-            model=self.settings.openai_realtime_model,
+            model=model_to_use,
             audio_bytes=len(audio),
+            prompt_id=template.id,
+            prompt_version=template.version,
         )
 
         try:
-            async with websockets.connect(url, extra_headers=headers) as ws:
-                assert isinstance(ws, WebSocketClientProtocol)
+            async with websockets.connect(url, additional_headers=headers) as ws:
+                assert isinstance(ws, ClientConnection)
 
-                # 1) Configure session with instructions (system prompt)
-                session_update = {
-                    "type": "session.update",
-                    "session": {
-                        "instructions": instructions,
-                    },
-                }
-                await ws.send(json.dumps(session_update))
-
-                # 2) Send a small text message describing the channel
-                input_text_event = {
-                    "type": "input_text",
-                    "text": input_text,
-                }
-                await ws.send(json.dumps(input_text_event))
-
-                # 3) Append audio to input buffer
-                append_event = {
-                    "type": "input_audio_buffer.append",
-                    "audio": audio_b64,
-                    "format": "wav",
-                }
-                await ws.send(json.dumps(append_event))
-
-                # 4) Commit audio buffer so the model starts processing
-                commit_event = {
-                    "type": "input_audio_buffer.commit",
-                }
-                await ws.send(json.dumps(commit_event))
-
-                # 5) Create a response (tell the model to respond)
-                response_create = {
-                    "type": "response.create",
-                }
-                await ws.send(json.dumps(response_create))
-
-                # 6) Listen for a textual response containing JSON classification
                 try:
-                    return await self._wait_for_realtime_json_response(ws)
+                    # 1) Configure session with instructions and audio format
+                    # The Realtime API needs to know the expected audio input format
+                    session_update = {
+                        "type": "session.update",
+                        "session": {
+                            "instructions": instructions,
+                            "modalities": ["text", "audio"],
+                            "input_audio_format": "pcm16",
+                            "output_audio_format": "pcm16",
+                            "turn_detection": None,  # Disable VAD, we're sending complete audio
+                        },
+                    }
+                    await ws.send(json.dumps(session_update))
+
+                    # Wait for session.updated confirmation
+                    while True:
+                        raw = await ws.recv()
+                        event = json.loads(raw)
+                        if event.get("type") == "session.updated":
+                            logger.debug("Realtime session configured successfully")
+                            break
+                        if event.get("type") == "error":
+                            error_msg = event.get("error", {}).get("message", "Unknown error")
+                            raise LLMClientError(f"Session configuration failed: {error_msg}")
+
+                    # 2) Create a conversation item with both text context and audio
+                    # Using conversation.item.create with input_audio for pre-recorded audio
+                    conversation_item = {
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "message",
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "input_text",
+                                    "text": input_text,
+                                },
+                                {
+                                    "type": "input_audio",
+                                    "audio": audio_b64,
+                                },
+                            ],
+                        },
+                    }
+                    await ws.send(json.dumps(conversation_item))
+
+                    # Wait for conversation.item.created confirmation
+                    while True:
+                        raw = await ws.recv()
+                        event = json.loads(raw)
+                        event_type = event.get("type")
+                        if event_type == "conversation.item.created":
+                            logger.debug("Conversation item created successfully")
+                            break
+                        if event_type == "error":
+                            error_msg = event.get("error", {}).get("message", "Unknown error")
+                            raise LLMClientError(f"Failed to create conversation item: {error_msg}")
+
+                    # 3) Request a response from the model
+                    response_create = {
+                        "type": "response.create",
+                        "response": {
+                            "modalities": ["text"],  # We only want text output (JSON)
+                        },
+                    }
+                    await ws.send(json.dumps(response_create))
+
+                    # 6) Listen for a textual response containing JSON classification
+                    result = await self._wait_for_realtime_json_response(ws)
+                    return result, metadata
+                except Exception as send_error:
+                    logger.error(
+                        "Error during Realtime WebSocket communication",
+                        error=str(send_error),
+                        error_type=type(send_error).__name__,
+                        exc_info=True,
+                    )
+                    raise
                 finally:
                     # Best-effort close
                     with contextlib.suppress(Exception):
@@ -472,13 +586,24 @@ class LLMClient:
         except asyncio.TimeoutError as e:
             logger.error("Realtime classification timed out", error=str(e))
             raise LLMClientError("Realtime audio classification timed out") from e
+        except (ConnectionClosed, ConnectionClosedError, ConnectionClosedOK) as e:
+            error_msg = f"WebSocket connection closed: code={e.code}, reason={e.reason or 'No reason provided'}"
+            logger.error("Realtime WebSocket connection closed", code=e.code, reason=e.reason)
+            raise LLMClientError(error_msg) from e
         except Exception as e:
-            logger.error("Realtime WebSocket error", error=str(e))
-            raise LLMClientError(f"Realtime audio classification failed: {e}") from e
+            error_msg = str(e) if str(e) else f"{type(e).__name__}: {repr(e)}"
+            logger.error(
+                "Realtime WebSocket error",
+                error=error_msg,
+                error_type=type(e).__name__,
+                error_repr=repr(e),
+                exc_info=True,
+            )
+            raise LLMClientError(f"Realtime audio classification failed: {error_msg}") from e
 
     async def _wait_for_realtime_json_response(
         self,
-        ws: WebSocketClientProtocol,
+        ws: ClientConnection,
         timeout_seconds: float | None = 30.0,
     ) -> dict[str, Any]:
         """Wait for a Realtime response that contains JSON classification.
@@ -488,9 +613,16 @@ class LLMClient:
         """
 
         async def _inner() -> dict[str, Any]:
-            last_text: str | None = None
+            accumulated_text: str = ""
             while True:
-                raw = await ws.recv()
+                try:
+                    raw = await ws.recv()
+                except (ConnectionClosed, ConnectionClosedError, ConnectionClosedOK) as e:
+                    error_msg = f"WebSocket closed during response: code={e.code}, reason={e.reason or 'No reason provided'}"
+                    logger.error(
+                        "WebSocket closed while waiting for response", code=e.code, reason=e.reason
+                    )
+                    raise LLMClientError(error_msg) from e
                 try:
                     event = json.loads(raw)
                 except json.JSONDecodeError:
@@ -499,29 +631,56 @@ class LLMClient:
 
                 event_type = event.get("type")
 
-                # Collect any text deltas/content from response output
-                if event_type in {"response.output_text.delta", "response.output_text.done"}:
-                    delta = event.get("delta") or event.get("text")
-                    if isinstance(delta, str) and delta:
-                        last_text = (last_text or "") + delta
+                # Log all events for debugging
+                logger.debug("Realtime event received", event_type=event_type)
 
-                # When the response is completed, try to parse JSON from accumulated text
-                if event_type == "response.completed":
-                    if not last_text:
+                # Collect text from response.text.delta events
+                if event_type == "response.text.delta":
+                    delta = event.get("delta", "")
+                    if delta:
+                        accumulated_text += delta
+
+                # Also check for response.text.done which contains final text
+                if event_type == "response.text.done":
+                    text = event.get("text", "")
+                    if text:
+                        accumulated_text = text  # Use the complete text
+
+                # When the response is done, try to parse JSON from accumulated text
+                if event_type == "response.done":
+                    response_data = event.get("response", {})
+                    output_items = response_data.get("output", [])
+
+                    # Try to extract text from output items
+                    for item in output_items:
+                        if item.get("type") == "message":
+                            for content in item.get("content", []):
+                                if content.get("type") == "text":
+                                    text = content.get("text", "")
+                                    if text:
+                                        accumulated_text = text
+
+                    if not accumulated_text:
                         raise LLMClientError("Realtime response contained no text output")
+
                     try:
-                        return json.loads(last_text)
+                        return json.loads(accumulated_text)
                     except json.JSONDecodeError as e:
                         logger.error(
                             "Failed to parse Realtime response text as JSON",
                             error=str(e),
-                            text_preview=last_text[:200],
+                            text_preview=accumulated_text[:500],
                         )
-                        raise LLMClientError("Realtime response was not valid JSON") from e
+                        raise LLMClientError(
+                            f"Realtime response was not valid JSON: {accumulated_text[:200]}"
+                        ) from e
 
                 # If an error event arrives from the server, surface it
                 if event_type == "error":
-                    message = event.get("error", {}).get("message", "Unknown Realtime error")
+                    error_info = event.get("error", {})
+                    message = error_info.get("message", "Unknown Realtime error")
+                    code = error_info.get("code", "")
+                    logger.error("Realtime API error", code=code, message=message)
                     raise LLMClientError(f"Realtime API error: {message}")
 
         if timeout_seconds is not None:

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contact Center - AI Classification</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23222' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3Cpath d='M13 8H3'/%3E%3Cpath d='M17 12H3'/%3E%3Cpath d='M21 16H3'/%3E%3C/svg%3E">
     <style>
         :root {
             --background: #ffffff;
@@ -874,10 +875,109 @@
         let mediaRecorder = null;
         let audioChunks = [];
         let audioBlob = null;
+        let wavBlob = null;  // Converted WAV blob for upload
         let recordingInterval = null;
         let recordingSeconds = 0;
         let isRecording = false;
         let mediaStream = null;
+
+        // Audio context for WAV conversion
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        /**
+         * Convert audio blob to WAV format (PCM16, mono, 24kHz)
+         * Required by OpenAI Realtime API
+         */
+        async function convertToWav(blob) {
+            // Decode the audio data
+            const arrayBuffer = await blob.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+            // Resample to 24kHz mono
+            const targetSampleRate = 24000;
+            const numChannels = 1;
+
+            // Create offline context for resampling
+            const offlineContext = new OfflineAudioContext(
+                numChannels,
+                Math.ceil(audioBuffer.duration * targetSampleRate),
+                targetSampleRate
+            );
+
+            // Create buffer source
+            const source = offlineContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(offlineContext.destination);
+            source.start(0);
+
+            // Render resampled audio
+            const resampledBuffer = await offlineContext.startRendering();
+
+            // Convert to WAV
+            const wavData = encodeWav(resampledBuffer);
+            return new Blob([wavData], { type: 'audio/wav' });
+        }
+
+        /**
+         * Encode AudioBuffer to WAV format
+         */
+        function encodeWav(audioBuffer) {
+            const numChannels = audioBuffer.numberOfChannels;
+            const sampleRate = audioBuffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+
+            // Get audio data (mono - use first channel or mix down)
+            let samples;
+            if (numChannels === 1) {
+                samples = audioBuffer.getChannelData(0);
+            } else {
+                // Mix down to mono
+                const left = audioBuffer.getChannelData(0);
+                const right = audioBuffer.getChannelData(1);
+                samples = new Float32Array(left.length);
+                for (let i = 0; i < left.length; i++) {
+                    samples[i] = (left[i] + right[i]) / 2;
+                }
+            }
+
+            // Convert float samples to 16-bit PCM
+            const buffer = new ArrayBuffer(44 + samples.length * 2);
+            const view = new DataView(buffer);
+
+            // WAV header
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + samples.length * 2, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true); // Subchunk1Size
+            view.setUint16(20, format, true); // AudioFormat (PCM)
+            view.setUint16(22, 1, true); // NumChannels (mono)
+            view.setUint32(24, sampleRate, true); // SampleRate
+            view.setUint32(28, sampleRate * 2, true); // ByteRate
+            view.setUint16(32, 2, true); // BlockAlign
+            view.setUint16(34, bitDepth, true); // BitsPerSample
+            writeString(view, 36, 'data');
+            view.setUint32(40, samples.length * 2, true);
+
+            // Write PCM samples
+            let offset = 44;
+            for (let i = 0; i < samples.length; i++) {
+                // Clamp and convert to 16-bit
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                view.setInt16(offset, val, true);
+                offset += 2;
+            }
+
+            return buffer;
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
 
         // Tab Switching
         function switchTab(tab) {
@@ -955,17 +1055,29 @@
                         }
                     };
 
-                    mediaRecorder.onstop = () => {
+                    mediaRecorder.onstop = async () => {
                         // Stop timer again in case it wasn't stopped
                         stopTimer();
-                        
+
                         if (audioChunks.length > 0) {
                             audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                             const audioUrl = URL.createObjectURL(audioBlob);
                             document.getElementById('audioPlayback').src = audioUrl;
                             document.getElementById('audioPreview').classList.add('visible');
+
+                            // Convert to WAV for upload (show converting status)
+                            document.getElementById('recordingStatus').textContent = 'Converting audio...';
+                            try {
+                                wavBlob = await convertToWav(audioBlob);
+                                document.getElementById('recordingStatus').textContent = 'Ready to classify';
+                                console.log('Audio converted to WAV:', wavBlob.size, 'bytes');
+                            } catch (err) {
+                                console.error('WAV conversion failed:', err);
+                                document.getElementById('recordingStatus').textContent = 'Conversion failed - try again';
+                                showError('Failed to convert audio format. Please try recording again.');
+                            }
                         }
-                        
+
                         // Stop all tracks
                         if (mediaStream) {
                             mediaStream.getTracks().forEach(track => track.stop());
@@ -1021,6 +1133,7 @@
         function discardRecording() {
             stopTimer();
             audioBlob = null;
+            wavBlob = null;
             audioChunks = [];
             recordingSeconds = 0;
             document.getElementById('audioPreview').classList.remove('visible');
@@ -1064,14 +1177,22 @@
         }
 
         async function submitAudio() {
-            if (!audioBlob) return;
+            if (!wavBlob) {
+                if (audioBlob) {
+                    showError('Audio is still converting. Please wait a moment.');
+                } else {
+                    showError('No audio recording available.');
+                }
+                return;
+            }
 
             setLoading(true, 'submitAudioBtn');
             hideError();
 
             try {
                 const formData = new FormData();
-                formData.append('audio_file', audioBlob, 'recording.wav');
+                // Send the converted WAV blob
+                formData.append('audio_file', wavBlob, 'recording.wav');
 
                 const response = await fetch('/api/v1/classify/voice', {
                     method: 'POST',
@@ -1225,7 +1346,7 @@
 
     <footer class="footer">
         <div class="footer-links">
-            <a href="/solution-design">Documentation</a>
+            <a href="/solution-design">Overview</a>
             <a href="/ui">UI</a>
             <a href="/docs">Swagger API</a>
         </div>
