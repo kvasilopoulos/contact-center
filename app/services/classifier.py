@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import logging
 import time
 
-from app.config import Settings
+from app.core import Settings
 from app.schemas import CategoryType
 from app.services.llm_client import LLMClient, LLMClientError
 from app.utils.pii_redaction import redact_pii

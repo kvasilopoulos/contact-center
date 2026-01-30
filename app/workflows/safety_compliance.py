@@ -185,9 +185,7 @@ class SafetyComplianceWorkflow(BaseWorkflow):
         Returns:
             Compliance record dictionary.
         """
-        record_id = (
-            f"COMP-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{self._hash_message(message)[:8]}"
-        )
+        record_id = f"COMP-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{self._hash_message(message)[:8]}"
 
         return {
             "id": record_id,

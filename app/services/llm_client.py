@@ -16,7 +16,7 @@ from websockets.asyncio.client import ClientConnection
 from websockets.exceptions import ConnectionClosed, ConnectionClosedError, ConnectionClosedOK
 
 if TYPE_CHECKING:
-    from app.config import Settings
+    from app.core import Settings
 from app.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from app.prompts import registry
 from app.services.audio_utils import (
@@ -258,9 +258,7 @@ class LLMClient:
             return result
 
         except json.JSONDecodeError as e:
-            logger.error(
-                "Failed to parse LLM response as JSON", extra={"error": str(e)}
-            )
+            logger.error("Failed to parse LLM response as JSON", extra={"error": str(e)})
             raise LLMClientError(f"Invalid JSON response from LLM: {e}") from e
         except OpenAIError as e:
             logger.error("OpenAI API error", extra={"error": str(e)})
@@ -601,9 +599,7 @@ class LLMClient:
                     with contextlib.suppress(Exception):
                         await ws.close()
         except asyncio.TimeoutError as e:
-            logger.error(
-                "Realtime classification timed out", extra={"error": str(e)}
-            )
+            logger.error("Realtime classification timed out", extra={"error": str(e)})
             raise LLMClientError("Realtime audio classification timed out") from e
         except (ConnectionClosed, ConnectionClosedError, ConnectionClosedOK) as e:
             error_msg = f"WebSocket connection closed: code={e.code}, reason={e.reason or 'No reason provided'}"
