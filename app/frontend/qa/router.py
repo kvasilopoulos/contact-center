@@ -1,4 +1,4 @@
-"""UI router for serving frontend interfaces."""
+"""QA router for serving question-answering and classify interfaces."""
 
 from pathlib import Path
 
@@ -6,9 +6,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-router = APIRouter(tags=["UI"])
+router = APIRouter(tags=["QA"])
 
-# Set up templates directory
+# app/frontend/qa -> app/frontend/templates
 templates_dir = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
 

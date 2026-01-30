@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Setup templates - now in /app/templates
+# Templates: app/frontend/docs -> app/frontend/templates
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
 
-# Docs directory
-DOCS_DIR = Path(__file__).parent.parent.parent / "docs"
+# Docs directory: project root / docs
+DOCS_DIR = Path(__file__).parent.parent.parent.parent / "docs"
 SIDEBAR_CONFIG = Path(__file__).parent / "sidebar.yaml"
 DOCS_TEMPLATE = "docs.html"
 
@@ -30,9 +30,7 @@ def load_sidebar_config() -> dict[str, Any]:
         content = SIDEBAR_CONFIG.read_text(encoding="utf-8")
         return yaml.safe_load(content) or {}
     except FileNotFoundError:
-        logger.warning(
-            "Sidebar config not found", extra={"path": str(SIDEBAR_CONFIG)}
-        )
+        logger.warning("Sidebar config not found", extra={"path": str(SIDEBAR_CONFIG)})
         return {"sections": []}
     except Exception as e:
         logger.error("Failed to load sidebar config", extra={"error": str(e)})
@@ -45,14 +43,12 @@ def extract_toc_from_markdown(content: str) -> list[dict[str, str]]:
     for text_line in content.split("\n"):
         stripped_line = text_line.strip()
         if stripped_line.startswith("#"):
-            # Count the number of # to determine level
             level = 0
             while level < len(stripped_line) and stripped_line[level] == "#":
                 level += 1
 
-            if level <= 3:  # Only include h1, h2, h3 in TOC
+            if level <= 3:
                 title = stripped_line[level:].strip()
-                # Create anchor from title
                 anchor = title.lower().replace(" ", "-").replace(".", "").replace(",", "")
                 toc.append(
                     {
@@ -66,17 +62,14 @@ def extract_toc_from_markdown(content: str) -> list[dict[str, str]]:
 
 def render_markdown(content: str) -> str:
     """Render markdown content to HTML with extensions."""
-    # Store mermaid blocks with placeholders
     mermaid_blocks = []
 
     def store_mermaid(match):
         idx = len(mermaid_blocks)
         mermaid_code = match.group(1).strip()
         mermaid_blocks.append(mermaid_code)
-        # Use a unique placeholder that won't be processed by markdown
         return f"<!--MERMAID_PLACEHOLDER_{idx}-->"
 
-    # Replace mermaid blocks with placeholders before markdown processing
     content = re.sub(
         r"```\s*mermaid\s*[\r\n]+(.*?)[\r\n]+```",
         store_mermaid,
@@ -104,35 +97,12 @@ def render_markdown(content: str) -> str:
     )
     html = md.convert(content)
 
-    # Replace placeholders with mermaid divs after markdown processing
     for idx, mermaid_code in enumerate(mermaid_blocks):
         placeholder = f"<!--MERMAID_PLACEHOLDER_{idx}-->"
-        # Clean up the mermaid code
         cleaned_code = mermaid_code.strip()
-
-        # Replace HTML <br/> tags in labels - Mermaid v10 doesn't support HTML in labels
-        # Replace with space or remove, depending on context
-        # Pattern: find <br/> inside quoted strings and replace with space
-        def replace_br_in_labels(match):
-            label_content = match.group(1)
-            # Replace <br/> with space inside label content
-            label_content = re.sub(r"<br\s*/?>", " ", label_content, flags=re.IGNORECASE)
-            return (
-                match.group(0)[: match.start(1) - match.start()]
-                + label_content
-                + match.group(0)[match.end(1) - match.start() :]
-            )
-
-        # Replace <br/> tags - simple approach: replace all with space
         cleaned_code = re.sub(r"<br\s*/?>", " ", cleaned_code, flags=re.IGNORECASE)
-
-        # Clean up multiple spaces
         cleaned_code = re.sub(r" +", " ", cleaned_code)
-
-        # Ensure proper line breaks
         cleaned_code = "\n".join(line.rstrip() for line in cleaned_code.split("\n"))
-
-        # Create the mermaid div
         mermaid_html = f'<div class="mermaid">\n{cleaned_code}\n</div>'
         html = html.replace(placeholder, mermaid_html)
 
@@ -140,66 +110,41 @@ def render_markdown(content: str) -> str:
 
 
 def url_to_file_path(url_path: str) -> str:
-    """Convert URL path to file path.
-
-    URLs use lowercase with hyphens: aws-quick-start
-    Files use original case with underscores: AWS_QUICK_START
-
-    This function tries to find the actual file by checking multiple variations.
-    """
-    # Common file name mappings for known files (only filenames, not directories)
+    """Convert URL path to file path."""
     file_mappings = {
-        "aws-quick-start": "AWS_QUICK_START",
-        "aws-deployment": "AWS_DEPLOYMENT",
-        "aws-setup-summary": "AWS_SETUP_SUMMARY",
-        "implementation-plan": "IMPLEMENTATION_PLAN",
+        "implementation-plan": "plan/IMPLEMENTATION_PLAN",
     }
-
-    # Split path into directory and filename
     parts = url_path.split("/")
     converted_parts = []
-
     for part in parts:
-        # Check if we have a direct mapping for this filename
         if part in file_mappings:
             converted_parts.append(file_mappings[part])
         else:
-            # Keep as is (for lowercase names like "architecture", "evaluation", "plan")
             converted_parts.append(part)
-
     return "/".join(converted_parts)
 
 
 def get_markdown_file(page: str) -> tuple[str, str]:
     """Get markdown file content and title."""
-    # Sanitize page path to prevent directory traversal
     page = page.replace("..", "").strip("/")
-
-    # Convert URL format to file path format
     file_page = url_to_file_path(page)
-
-    # Try to find the file with converted name
     file_path = DOCS_DIR / f"{file_page}.md"
 
     if not file_path.exists():
-        # Try with .md extension if not provided
         file_path = DOCS_DIR / file_page
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Documentation page not found")
 
-    # Ensure the file is within docs directory
     try:
         file_path = file_path.resolve()
-        DOCS_DIR.resolve()
-        if not str(file_path).startswith(str(DOCS_DIR.resolve())):
+        docs_resolved = DOCS_DIR.resolve()
+        if not str(file_path).startswith(str(docs_resolved)):
             raise HTTPException(status_code=404, detail="Invalid documentation path") from None
     except Exception as exc:
         raise HTTPException(status_code=404, detail="Invalid documentation path") from exc
 
-    # Read the file
     try:
         content = file_path.read_text(encoding="utf-8")
-        # Extract title from first h1 or use filename
         title = page.replace("-", " ").replace("_", " ").title()
         for text_line in content.split("\n"):
             if text_line.startswith("# "):
@@ -215,16 +160,10 @@ def get_markdown_file(page: str) -> tuple[str, str]:
 
 
 @router.get("/{page:path}", response_class=HTMLResponse, response_model=None)
-async def docs_page(
-    request: Request, page: str
-) -> HTMLResponse | RedirectResponse:
-    """Render a specific documentation page.
-
-    If page is empty, redirect to the first page from sidebar config.
-    """
+async def docs_page(request: Request, page: str = "") -> HTMLResponse | RedirectResponse:
+    """Render a specific documentation page."""
     sidebar_config = load_sidebar_config()
 
-    # If no page specified, use first page from sidebar
     if not page or page == "":
         first_page = None
         if sidebar_config.get("sections"):
@@ -234,28 +173,21 @@ async def docs_page(
                     break
 
         if first_page:
-            return RedirectResponse(url=f"/{first_page}", status_code=302)
-        else:
-            # Fallback to welcome page
-            return templates.TemplateResponse(
-                request=request,
-                name=DOCS_TEMPLATE,
-                context={
-                    "title": "Documentation",
-                    "content": "<h1>Welcome to Documentation</h1><p>Please configure the sidebar to get started.</p>",
-                    "toc": [],
-                    "sidebar": sidebar_config,
-                    "current_page": "",
-                },
-            )
+            return RedirectResponse(url=f"/docs/{first_page}", status_code=302)
+        return templates.TemplateResponse(
+            request=request,
+            name=DOCS_TEMPLATE,
+            context={
+                "title": "Documentation",
+                "content": "<h1>Welcome to Documentation</h1><p>Please configure the sidebar to get started.</p>",
+                "toc": [],
+                "sidebar": sidebar_config,
+                "current_page": "",
+            },
+        )
 
-    # Get markdown content
     content, title = get_markdown_file(page)
-
-    # Render markdown to HTML
     html_content = render_markdown(content)
-
-    # Extract TOC
     toc = extract_toc_from_markdown(content)
 
     return templates.TemplateResponse(

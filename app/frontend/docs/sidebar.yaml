@@ -1,0 +1,37 @@
+# Documentation Sidebar Configuration
+# Categories: Overview → Solution Design → Architecture → Evaluation → AWS → Frontend
+# Use lowercase with hyphens for URLs
+
+sections:
+  - title: "Overview"
+    pages:
+      - title: "Overview"
+        path: "overview"
+        description: "What the app does, quick start, and links"
+
+  - title: "Solution & Architecture"
+    pages:
+      - title: "Solution Design"
+        path: "solution-design"
+        description: "Design decisions, compliance, and trade-offs"
+      - title: "System Architecture"
+        path: "architecture"
+        description: "Components, workflows, API, and code map"
+
+  - title: "Evaluation & Testing"
+    pages:
+      - title: "Evaluation & Testing"
+        path: "evaluation"
+        description: "Test strategy, sample results, and quality gates"
+
+  - title: "Deployment"
+    pages:
+      - title: "AWS"
+        path: "aws"
+        description: "Deploy to ECS with Terraform (quick start and reference)"
+
+  - title: "Frontend"
+    pages:
+      - title: "Frontend & Docs UI"
+        path: "frontend"
+        description: "Documentation UI, sidebar, and customization"
