@@ -89,6 +89,7 @@ dmypy.json
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+nul
 
 # Project specific
 *.log
