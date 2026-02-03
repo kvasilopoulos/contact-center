@@ -2,11 +2,13 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthResponse(BaseModel):
     """Response model for health check endpoint."""
+
+    model_config = ConfigDict(title="Health status (version, environment, checks)")
 
     status: Literal["healthy", "degraded", "unhealthy"] = Field(
         ...,

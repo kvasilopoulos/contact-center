@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.common import CategoryType, ChannelType
 
@@ -27,8 +27,9 @@ class ClassificationRequest(BaseModel):
         description="Optional metadata about the message context",
     )
 
-    model_config = {
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        title="Classification request (message + channel)",
+        json_schema_extra={
             "examples": [
                 {
                     "message": "What is your refund policy for prescription products?",
@@ -46,12 +47,14 @@ class ClassificationRequest(BaseModel):
                     "metadata": {"product_id": "MED-789"},
                 },
             ]
-        }
-    }
+        },
+    )
 
 
 class NextStepInfo(BaseModel):
     """Information about the recommended next step."""
+
+    model_config = ConfigDict(title="Next step (action, priority, human review)")
 
     action: str = Field(
         ...,
@@ -121,8 +124,9 @@ class ClassificationResponse(BaseModel):
         description="LLM model used for classification",
     )
 
-    model_config = {
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        title="Classification result (category, confidence, next step)",
+        json_schema_extra={
             "examples": [
                 {
                     "request_id": "req_abc123",
@@ -143,5 +147,5 @@ class ClassificationResponse(BaseModel):
                     "model": "gpt-4.1",
                 }
             ]
-        }
-    }
+        },
+    )
