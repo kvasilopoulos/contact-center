@@ -47,6 +47,9 @@ _RECORD_ATTRS = frozenset(
     }
 )
 
+# Third-party / display-only attributes to never include in JSON (e.g. ANSI color codes).
+_JSON_EXCLUDE_EXTRAS = frozenset({"color_message"})
+
 
 class JsonFormatter(logging.Formatter):
     """Format log records as one JSON object per line for centralized ingestion."""
@@ -59,7 +62,7 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
         for key, value in record.__dict__.items():
-            if key not in _RECORD_ATTRS and value is not None:
+            if key not in _RECORD_ATTRS and key not in _JSON_EXCLUDE_EXTRAS and value is not None:
                 payload[key] = value
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)

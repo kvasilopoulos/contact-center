@@ -57,6 +57,25 @@ def test_json_formatter_includes_exception_when_present() -> None:
     assert "test error" in parsed["exception"]
 
 
+def test_json_formatter_excludes_color_message() -> None:
+    """Uvicorn-style color_message (ANSI codes) is excluded from JSON output."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="uvicorn.error",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="Uvicorn running on %s://%s:%d (Press CTRL+C to quit)",
+        args=("http", "127.0.0.1", 8001),
+        exc_info=None,
+    )
+    record.color_message = "Uvicorn running on \x1b[1m%s://%s:%d\x1b[0m (Press CTRL+C to quit)"
+    output = formatter.format(record)
+    parsed = json.loads(output.strip())
+    assert parsed["message"] == "Uvicorn running on http://127.0.0.1:8001 (Press CTRL+C to quit)"
+    assert "color_message" not in parsed
+
+
 def test_configure_logging_is_deterministic_and_testable() -> None:
     """configure_logging with a stream allows deterministic, testable output."""
     stream = StringIO()
