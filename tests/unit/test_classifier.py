@@ -4,8 +4,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.classifier import ClassificationError, ClassificationResult, ClassifierService
-from app.services.llm_client import LLMClientError
+from app.schemas.llm_responses import ClassificationLLMResponse
+from app.services.classification import ClassificationError, ClassificationResult, ClassifierService
+from app.services.llm import LLMClientError, LLMParseError
 
 
 class TestClassifierService:
@@ -17,10 +18,10 @@ class TestClassifierService:
         classifier_service: ClassifierService,
         mock_llm_client: MagicMock,
         informational_message: str,
-        mock_classification_response_informational: dict,
+        mock_classification_response_informational: ClassificationLLMResponse,
     ) -> None:
         """Test classifying an informational message."""
-        mock_llm_client.complete_with_template.return_value = (
+        mock_llm_client.classify_text.return_value = (
             mock_classification_response_informational,
             {
                 "prompt_id": "classification",
@@ -45,10 +46,10 @@ class TestClassifierService:
         classifier_service: ClassifierService,
         mock_llm_client: MagicMock,
         service_action_message: str,
-        mock_classification_response_service_action: dict,
+        mock_classification_response_service_action: ClassificationLLMResponse,
     ) -> None:
         """Test classifying a service action message."""
-        mock_llm_client.complete_with_template.return_value = (
+        mock_llm_client.classify_text.return_value = (
             mock_classification_response_service_action,
             {
                 "prompt_id": "classification",
@@ -69,10 +70,10 @@ class TestClassifierService:
         classifier_service: ClassifierService,
         mock_llm_client: MagicMock,
         safety_compliance_message: str,
-        mock_classification_response_safety: dict,
+        mock_classification_response_safety: ClassificationLLMResponse,
     ) -> None:
         """Test classifying a safety compliance message."""
-        mock_llm_client.complete_with_template.return_value = (
+        mock_llm_client.classify_text.return_value = (
             mock_classification_response_safety,
             {
                 "prompt_id": "classification",
@@ -92,10 +93,10 @@ class TestClassifierService:
         self,
         classifier_service: ClassifierService,
         mock_llm_client: MagicMock,
-        mock_classification_response_informational: dict,
+        mock_classification_response_informational: ClassificationLLMResponse,
     ) -> None:
         """Test classification includes channel in prompt."""
-        mock_llm_client.complete_with_template.return_value = (
+        mock_llm_client.classify_text.return_value = (
             mock_classification_response_informational,
             {
                 "prompt_id": "classification",
@@ -108,30 +109,20 @@ class TestClassifierService:
         await classifier_service.classify("Test message", channel="voice")
 
         # Verify the template was called with correct variables
-        call_args = mock_llm_client.complete_with_template.call_args
+        call_args = mock_llm_client.classify_text.call_args
         variables = call_args.kwargs.get("variables", {})
         assert variables.get("channel") == "voice"
         assert variables.get("message") == "Test message"
 
     @pytest.mark.asyncio
-    async def test_classify_invalid_category_defaults(
+    async def test_classify_parse_error_defaults(
         self,
         classifier_service: ClassifierService,
         mock_llm_client: MagicMock,
     ) -> None:
-        """Test that invalid category from LLM defaults to service_action."""
-        mock_llm_client.complete_with_template.return_value = (
-            {
-                "category": "invalid_category",
-                "confidence": 0.9,
-                "reasoning": "Test",
-            },
-            {
-                "prompt_id": "classification",
-                "version": "1.0.0",
-                "variant": "active",
-                "model": "gpt-4.1",
-            },
+        """Test that parse error defaults to service_action with low confidence."""
+        mock_llm_client.classify_text.side_effect = LLMParseError(
+            "Failed to parse LLM response"
         )
 
         result = await classifier_service.classify("Test message")
@@ -141,12 +132,12 @@ class TestClassifierService:
         assert result.confidence == 0.3
 
     @pytest.mark.asyncio
-    async def test_classify_confidence_clamped(
+    async def test_classify_confidence_preserved(
         self,
         classifier_service: ClassifierService,
         mock_llm_client: MagicMock,
     ) -> None:
-        """Test that confidence is clamped to valid range."""
+        """Test that confidence from valid response is preserved."""
         metadata = {
             "prompt_id": "classification",
             "version": "1.0.0",
@@ -154,25 +145,25 @@ class TestClassifierService:
             "model": "gpt-4",
         }
 
-        # Test above 1.0
-        mock_llm_client.complete_with_template.return_value = (
-            {
-                "category": "informational",
-                "confidence": 1.5,
-                "reasoning": "Test",
-            },
+        # With Pydantic validation, confidence is already bounded by the model
+        # Test boundary values
+        mock_llm_client.classify_text.return_value = (
+            ClassificationLLMResponse(
+                category="informational",
+                confidence=1.0,
+                reasoning="Test high confidence",
+            ),
             metadata,
         )
         result = await classifier_service.classify("Test")
         assert result.confidence == 1.0
 
-        # Test below 0.0
-        mock_llm_client.complete_with_template.return_value = (
-            {
-                "category": "informational",
-                "confidence": -0.5,
-                "reasoning": "Test",
-            },
+        mock_llm_client.classify_text.return_value = (
+            ClassificationLLMResponse(
+                category="informational",
+                confidence=0.0,
+                reasoning="Test low confidence",
+            ),
             metadata,
         )
         result = await classifier_service.classify("Test")
@@ -185,7 +176,7 @@ class TestClassifierService:
         mock_llm_client: MagicMock,
     ) -> None:
         """Test that LLM errors are properly propagated."""
-        mock_llm_client.complete_with_template.side_effect = LLMClientError("API error")
+        mock_llm_client.classify_text.side_effect = LLMClientError("API error")
 
         with pytest.raises(ClassificationError) as exc_info:
             await classifier_service.classify("Test message")
@@ -208,10 +199,10 @@ class TestClassifierService:
         self,
         classifier_service: ClassifierService,
         mock_llm_client: MagicMock,
-        mock_classification_response_informational: dict,
+        mock_classification_response_informational: ClassificationLLMResponse,
     ) -> None:
         """Test that processing time is tracked."""
-        mock_llm_client.complete_with_template.return_value = (
+        mock_llm_client.classify_text.return_value = (
             mock_classification_response_informational,
             {
                 "prompt_id": "classification",

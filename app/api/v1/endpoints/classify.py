@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.core import Settings, get_settings, record_classification
 from app.schemas import ClassificationRequest, ClassificationResponse, NextStepInfo
-from app.services.classifier import ClassificationError, ClassifierService
+from app.services.classification import ClassificationError, ClassifierService
 from app.services.workflow_router import execute_workflow
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,7 @@ def get_classifier_service(
 
 @router.post(
     "/classify",
+    operation_id="classify_message",
     response_model=ClassificationResponse,
     summary="Classify Customer Message",
     description=(
@@ -147,6 +148,7 @@ async def classify_message(
 
 @router.post(
     "/classify/voice",
+    operation_id="classify_voice",
     response_model=ClassificationResponse,
     summary="Classify Customer Voice Message",
     description=(

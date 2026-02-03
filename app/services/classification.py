@@ -6,7 +6,13 @@ import time
 
 from app.core import Settings
 from app.schemas import CategoryType
-from app.services.llm_client import LLMClient, LLMClientError
+from app.schemas.llm_responses import ClassificationLLMResponse
+from app.services.llm import (
+    LLMClient,
+    LLMClientError,
+    LLMParseError,
+    LLMRefusalError,
+)
 from app.utils.pii_redaction import redact_pii
 
 logger = logging.getLogger(__name__)
@@ -46,6 +52,9 @@ class ClassifierService:
     ) -> ClassificationResult:
         """Classify a customer message into a category.
 
+        Uses OpenAI structured outputs for automatic validation.
+        The Pydantic model ensures category is one of the valid types.
+
         Args:
             message: The customer message to classify.
             channel: The communication channel (chat, voice, mail).
@@ -60,45 +69,23 @@ class ClassifierService:
         start_time = time.perf_counter()
 
         try:
-            # Use prompt template from registry
-            result, prompt_metadata = await self.llm_client.complete_with_template(
+            # Use structured output parsing - validation is automatic via Pydantic model
+            result, prompt_metadata = await self.llm_client.classify_text(
                 template_id="classification",
                 variables={"channel": channel, "message": message},
+                response_model=ClassificationLLMResponse,
                 experiment_id=experiment_id,
             )
 
             processing_time_ms = (time.perf_counter() - start_time) * 1000
 
-            # Validate and extract result
-            category = result.get("category", "").lower()
-            confidence = float(result.get("confidence", 0.0))
-            reasoning = result.get("reasoning", "No reasoning provided")
-
-            # Validate category
-            valid_categories = {"informational", "service_action", "safety_compliance"}
-            if category not in valid_categories:
-                logger.warning(
-                    "Invalid category returned by LLM",
-                    extra={
-                        "category": category,
-                        "valid_categories": list(valid_categories),
-                        "prompt_version": prompt_metadata.get("version"),
-                    },
-                )
-                # Default to service_action with low confidence for unknown categories
-                category = "service_action"
-                confidence = 0.3
-                reasoning = (
-                    f"Original category '{category}' was invalid, defaulting to service_action"
-                )
-
-            # Clamp confidence to valid range
-            confidence = max(0.0, min(1.0, confidence))
+            # Confidence clamping (defensive - model should respect constraints)
+            confidence = max(0.0, min(1.0, result.confidence))
 
             logger.info(
                 "Message classified",
                 extra={
-                    "category": category,
+                    "category": result.category,
                     "confidence": confidence,
                     "channel": channel,
                     "processing_time_ms": round(processing_time_ms, 2),
@@ -112,13 +99,31 @@ class ClassifierService:
             )
 
             return ClassificationResult(
-                category=category,
+                category=result.category,
                 confidence=confidence,
-                reasoning=reasoning,
+                reasoning=result.reasoning,
                 processing_time_ms=processing_time_ms,
                 prompt_version=prompt_metadata.get("version", ""),
                 prompt_variant=prompt_metadata.get("variant", ""),
                 model=prompt_metadata.get("model", ""),
+            )
+
+        except (LLMParseError, LLMRefusalError) as e:
+            # Structured output failed - return safe default
+            processing_time_ms = (time.perf_counter() - start_time) * 1000
+            logger.warning(
+                "Structured output parsing failed, using fallback",
+                extra={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "processing_time_ms": round(processing_time_ms, 2),
+                },
+            )
+            return ClassificationResult(
+                category="service_action",
+                confidence=0.3,
+                reasoning=f"Classification failed: {e}. Defaulting to service_action.",
+                processing_time_ms=processing_time_ms,
             )
 
         except LLMClientError as e:
@@ -152,8 +157,8 @@ class ClassifierService:
         start_time = time.perf_counter()
 
         try:
-            # Call Realtime audio classification
-            result, prompt_metadata = await self.llm_client.classify_audio_realtime(
+            # Call audio classification via Realtime API
+            result, prompt_metadata = await self.llm_client.classify_audio(
                 audio=audio,
                 channel=channel,
             )

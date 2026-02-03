@@ -9,8 +9,6 @@ The OpenAI Realtime API requires audio in a specific format:
 This module provides utilities to convert WAV files to this format.
 """
 
-from __future__ import annotations
-
 import io
 import logging
 import struct

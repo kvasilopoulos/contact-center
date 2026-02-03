@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 import pytest
 
-from app.services.classifier import ClassificationResult
+from app.services.classification import ClassificationResult
 
 
 class TestHealthEndpoints:

@@ -12,8 +12,9 @@ from app.core import Settings, get_settings
 from app.main import app
 from app.prompts import get_registry, load_prompts
 from app.prompts.template import LLMConfig, PromptMetadata, PromptParameter, PromptTemplate
-from app.services.classifier import ClassifierService
-from app.services.llm_client import LLMClient
+from app.schemas.llm_responses import ClassificationLLMResponse
+from app.services.classification import ClassifierService
+from app.services.llm import LLMClient
 
 
 @pytest.fixture(autouse=True)
@@ -64,8 +65,8 @@ def test_settings() -> Settings:
 def mock_llm_client(test_settings: Settings) -> MagicMock:  # noqa: ARG001
     """Create a mock LLM client."""
     mock = MagicMock(spec=LLMClient)
-    mock.complete_with_template = AsyncMock()
-    mock.classify_audio_realtime = AsyncMock()
+    mock.classify_text = AsyncMock()  # Structured output method for text
+    mock.classify_audio = AsyncMock()  # Audio classification method
     return mock
 
 
@@ -117,30 +118,30 @@ def safety_compliance_message() -> str:
 
 
 @pytest.fixture
-def mock_classification_response_informational() -> dict:
+def mock_classification_response_informational() -> ClassificationLLMResponse:
     """Mock LLM response for informational category."""
-    return {
-        "category": "informational",
-        "confidence": 0.95,
-        "reasoning": "Customer is asking about refund policy - this is an informational inquiry.",
-    }
+    return ClassificationLLMResponse(
+        category="informational",
+        confidence=0.95,
+        reasoning="Customer is asking about refund policy - this is an informational inquiry.",
+    )
 
 
 @pytest.fixture
-def mock_classification_response_service_action() -> dict:
+def mock_classification_response_service_action() -> ClassificationLLMResponse:
     """Mock LLM response for service action category."""
-    return {
-        "category": "service_action",
-        "confidence": 0.92,
-        "reasoning": "Customer wants to open a ticket for a missing order - requires action.",
-    }
+    return ClassificationLLMResponse(
+        category="service_action",
+        confidence=0.92,
+        reasoning="Customer wants to open a ticket for a missing order - requires action.",
+    )
 
 
 @pytest.fixture
-def mock_classification_response_safety() -> dict:
+def mock_classification_response_safety() -> ClassificationLLMResponse:
     """Mock LLM response for safety compliance category."""
-    return {
-        "category": "safety_compliance",
-        "confidence": 0.98,
-        "reasoning": "Customer reports adverse reaction after taking medication - safety concern.",
-    }
+    return ClassificationLLMResponse(
+        category="safety_compliance",
+        confidence=0.98,
+        reasoning="Customer reports adverse reaction after taking medication - safety concern.",
+    )

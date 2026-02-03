@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.main import app
-from app.services.classifier import ClassificationResult
+from app.services.classification import ClassificationResult
 
 # Skip real LLM tests unless explicitly enabled
 USE_REAL_LLM = os.getenv("E2E_REAL_LLM", "false").lower() == "true"

@@ -1,6 +1,19 @@
 """Services module."""
 
-from app.services.classifier import ClassifierService
-from app.services.llm_client import LLMClient, LLMClientError, LLMServiceUnavailable
+from app.services.classification import ClassifierService
+from app.services.llm import (
+    LLMClient,
+    LLMClientError,
+    LLMParseError,
+    LLMRefusalError,
+    LLMServiceUnavailable,
+)
 
-__all__ = ["ClassifierService", "LLMClient", "LLMClientError", "LLMServiceUnavailable"]
+__all__ = [
+    "ClassifierService",
+    "LLMClient",
+    "LLMClientError",
+    "LLMParseError",
+    "LLMRefusalError",
+    "LLMServiceUnavailable",
+]

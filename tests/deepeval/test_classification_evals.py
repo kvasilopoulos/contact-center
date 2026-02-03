@@ -18,7 +18,7 @@ import pytest
 
 from app.core import Settings, get_settings
 from app.main import app
-from app.services.classifier import ClassificationResult
+from app.services.classification import ClassificationResult
 from deepeval import assert_test
 
 

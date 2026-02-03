@@ -7,7 +7,9 @@ import base64
 import contextlib
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
+
+from pydantic import BaseModel
 
 from openai import AsyncOpenAI, OpenAIError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -50,6 +52,25 @@ class LLMServiceUnavailable(LLMClientError):
         self.retry_after = retry_after
 
 
+class LLMParseError(LLMClientError):
+    """Exception when LLM response fails to parse to expected model."""
+
+    def __init__(self, message: str, raw_content: str | None = None) -> None:
+        super().__init__(message)
+        self.raw_content = raw_content
+
+
+class LLMRefusalError(LLMClientError):
+    """Exception when LLM refuses to respond."""
+
+    def __init__(self, message: str, refusal: str) -> None:
+        super().__init__(message)
+        self.refusal = refusal
+
+
+T = TypeVar("T", bound=BaseModel)
+
+
 class LLMClient:
     """Async client for OpenAI API interactions with circuit breaker."""
 
@@ -78,160 +99,52 @@ class LLMClient:
             )
         return self._client
 
-    def _build_response_format(
-        self, response_format_config: str | dict[str, Any]
-    ) -> dict[str, Any]:
-        """Build response format configuration for OpenAI API.
-
-        Args:
-            response_format_config: Either "json_object" string or dict with schema definition
-
-        Returns:
-            Response format dict for OpenAI API
-        """
-        # If it's already a dict (structured schema), use it directly
-        if isinstance(response_format_config, dict):
-            return response_format_config
-
-        # If it's "json_object", convert to structured output schema
-        if response_format_config == "json_object":
-            return {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "classification_response",
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "category": {
-                                "type": "string",
-                                "enum": ["informational", "service_action", "safety_compliance"],
-                            },
-                            "confidence": {
-                                "type": "number",
-                                "minimum": 0.0,
-                                "maximum": 1.0,
-                            },
-                            "reasoning": {
-                                "type": "string",
-                            },
-                        },
-                        "required": ["category", "confidence", "reasoning"],
-                        "additionalProperties": False,
-                    },
-                },
-            }
-
-        # Default: use structured output schema
-        return {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "classification_response",
-                "strict": True,
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "category": {
-                            "type": "string",
-                            "enum": ["informational", "service_action", "safety_compliance"],
-                        },
-                        "confidence": {
-                            "type": "number",
-                            "minimum": 0.0,
-                            "maximum": 1.0,
-                        },
-                        "reasoning": {
-                            "type": "string",
-                        },
-                    },
-                    "required": ["category", "confidence", "reasoning"],
-                    "additionalProperties": False,
-                },
-            },
-        }
-
-    async def _do_complete_with_model(
-        self,
-        model: str,
-        system_prompt: str,
-        user_prompt: str,
-        temperature: float,
-        max_tokens: int,
-        response_format: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Internal method to perform LLM call with specific model.
-
-        This wraps _do_complete but allows specifying a different model.
-
-        Args:
-            model: Model name to use
-            system_prompt: System prompt text
-            user_prompt: User prompt text
-            temperature: Temperature setting
-            max_tokens: Maximum tokens to generate
-            response_format: Optional response format. If None, uses structured output schema.
-        """
-        try:
-            result: dict[str, Any]
-            async with self._circuit_breaker:
-                result = await self._do_complete_internal(
-                    model=model,
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
-                )
-            return result
-        except CircuitBreakerOpen as e:
-            logger.warning(
-                "Circuit breaker open - LLM service unavailable",
-                extra={
-                    "retry_after": e.retry_after,
-                    "circuit_state": self._circuit_breaker.state.value,
-                },
-            )
-            raise LLMServiceUnavailable(
-                "LLM service temporarily unavailable. Please try again later.",
-                retry_after=e.retry_after,
-            ) from e
-
     @retry(
         retry=retry_if_exception_type(OpenAIError),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
     )
-    async def _do_complete_internal(
+    async def _call_structured_parse(
         self,
         model: str,
         system_prompt: str,
         user_prompt: str,
         temperature: float,
         max_tokens: int,
-        response_format: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Internal method to perform the actual LLM call with retries.
+        response_model: type[T],
+    ) -> T:
+        """Internal method to perform LLM call with structured output parsing.
+
+        Uses OpenAI's beta.chat.completions.parse() for automatic validation.
 
         Args:
-            model: Model name to use
-            system_prompt: System prompt text
-            user_prompt: User prompt text
-            temperature: Temperature setting
-            max_tokens: Maximum tokens to generate
-            response_format: Optional response format. If None, uses structured output schema.
+            model: Model name to use.
+            system_prompt: System prompt text.
+            user_prompt: User prompt text.
+            temperature: Temperature setting.
+            max_tokens: Maximum tokens to generate.
+            response_model: Pydantic model class for response validation.
+
+        Returns:
+            Parsed and validated Pydantic model instance.
+
+        Raises:
+            LLMParseError: If response cannot be parsed to the model.
+            LLMRefusalError: If model refuses to respond.
+            LLMClientError: For other API errors.
         """
         try:
             logger.debug(
-                "Sending LLM request",
-                extra={"model": model, "user_prompt_length": len(user_prompt)},
+                "Sending structured LLM request",
+                extra={
+                    "model": model,
+                    "response_model": response_model.__name__,
+                    "user_prompt_length": len(user_prompt),
+                },
             )
 
-            # Default to structured output schema if not provided
-            if response_format is None:
-                response_format = self._build_response_format("json_object")
-
-            response = await self.client.chat.completions.create(
+            response = await self.client.beta.chat.completions.parse(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -239,58 +152,85 @@ class LLMClient:
                 ],
                 temperature=temperature,
                 max_tokens=max_tokens,
-                response_format=response_format,
+                response_format=response_model,
             )
 
-            content = response.choices[0].message.content
-            if not content:
-                raise LLMClientError("Empty response from LLM")
+            message = response.choices[0].message
+
+            # Check for refusal
+            if message.refusal:
+                logger.warning(
+                    "LLM refused to respond",
+                    extra={"refusal": message.refusal, "model": model},
+                )
+                raise LLMRefusalError(
+                    "LLM refused to generate response",
+                    refusal=message.refusal,
+                )
+
+            # Get parsed response
+            parsed = message.parsed
+            if parsed is None:
+                raise LLMParseError(
+                    "LLM response was not parsed successfully",
+                    raw_content=message.content,
+                )
 
             logger.debug(
-                "LLM response received",
+                "Structured LLM response received",
                 extra={
                     "model": model,
+                    "response_model": response_model.__name__,
                     "usage": response.usage.model_dump() if response.usage else None,
                 },
             )
 
-            result: dict[str, Any] = json.loads(content)
-            return result
+            return parsed
 
-        except json.JSONDecodeError as e:
-            logger.error("Failed to parse LLM response as JSON", extra={"error": str(e)})
-            raise LLMClientError(f"Invalid JSON response from LLM: {e}") from e
         except OpenAIError as e:
+            # Check for length error (response cut off)
+            if "length" in str(e).lower():
+                logger.error(
+                    "LLM response truncated due to max_tokens",
+                    extra={"error": str(e), "max_tokens": max_tokens},
+                )
+                raise LLMParseError(
+                    f"Response truncated - increase max_tokens: {e}",
+                ) from e
             logger.error("OpenAI API error", extra={"error": str(e)})
             raise LLMClientError(f"OpenAI API error: {e}") from e
 
-    async def complete_with_template(
+    async def classify_text(
         self,
         template_id: str,
         variables: dict[str, Any],
+        response_model: type[T],
         version: str | None = None,
         experiment_id: str | None = None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Send a completion request using a prompt template.
+    ) -> tuple[T, dict[str, Any]]:
+        """Send a completion request using a prompt template with structured output.
+
+        This method uses OpenAI's structured output feature for automatic
+        validation of the response against the provided Pydantic model.
 
         Args:
-            template_id: ID of the prompt template to use
-            variables: Variables to substitute in the template
-            version: Optional specific version to use. If None, uses active version.
-            experiment_id: Optional experiment ID for A/B testing
+            template_id: ID of the prompt template to use.
+            variables: Variables to substitute in the template.
+            response_model: Pydantic model class for response validation.
+            version: Optional specific version to use.
+            experiment_id: Optional experiment ID for A/B testing.
 
         Returns:
-            Tuple of (LLM response, metadata) where metadata contains:
-                - prompt_id: The prompt ID used
-                - version: The prompt version used
-                - variant: The variant name (for experiments) or "active"
-                - experiment_id: The experiment ID (if applicable)
+            Tuple of (parsed_response, metadata) where:
+                - parsed_response: Validated Pydantic model instance.
+                - metadata: Dict with prompt_id, version, variant, model info.
 
         Raises:
-            LLMClientError: If the request fails or response is invalid
-            LLMServiceUnavailable: If circuit breaker is open
-            KeyError: If the template is not found
-            ValueError: If template rendering fails
+            LLMParseError: If response fails validation.
+            LLMRefusalError: If model refuses to respond.
+            LLMServiceUnavailable: If circuit breaker is open.
+            KeyError: If template is not found.
+            ValueError: If template rendering fails.
         """
         # Get template from registry (handles experiments if specified)
         if experiment_id:
@@ -339,37 +279,46 @@ class LLMClient:
         if model_to_use == self.settings.openai_model and template.llm_config.model:
             model_to_use = template.llm_config.model
 
-        # Log prompt usage
         logger.info(
-            "Using prompt template",
+            "Classifying text with structured output",
             extra={
                 "prompt_id": metadata["prompt_id"],
                 "version": metadata["version"],
                 "variant": metadata.get("variant"),
                 "experiment_id": metadata.get("experiment_id"),
                 "model": model_to_use,
+                "response_model": response_model.__name__,
             },
         )
 
-        # Build response format from template config
-        response_format = self._build_response_format(template.llm_config.response_format)
+        # Call OpenAI with circuit breaker protection
+        try:
+            async with self._circuit_breaker:
+                parsed_response = await self._call_structured_parse(
+                    model=model_to_use,
+                    system_prompt=template.system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=template.llm_config.temperature,
+                    max_tokens=template.llm_config.max_tokens,
+                    response_model=response_model,
+                )
+        except CircuitBreakerOpen as e:
+            logger.warning(
+                "Circuit breaker open - LLM service unavailable",
+                extra={
+                    "retry_after": e.retry_after,
+                    "circuit_state": self._circuit_breaker.state.value,
+                },
+            )
+            raise LLMServiceUnavailable(
+                "LLM service temporarily unavailable. Please try again later.",
+                retry_after=e.retry_after,
+            ) from e
 
-        # Use LLM config from template with dynamic model
-        llm_response = await self._do_complete_with_model(
-            model=model_to_use,
-            system_prompt=template.system_prompt,
-            user_prompt=user_prompt,
-            temperature=template.llm_config.temperature,
-            max_tokens=template.llm_config.max_tokens,
-            response_format=response_format,
-        )
-
-        # Add model to metadata
         metadata["model"] = model_to_use
+        return parsed_response, metadata
 
-        return llm_response, metadata
-
-    async def classify_audio_realtime(
+    async def classify_audio(
         self,
         audio: bytes,
         channel: str = "voice",
@@ -391,7 +340,7 @@ class LLMClient:
         """
         try:
             async with self._circuit_breaker:
-                return await self._do_classify_audio_realtime(audio=audio, channel=channel)
+                return await self._classify_audio_internal(audio=audio, channel=channel)
         except CircuitBreakerOpen as e:
             logger.warning(
                 "Circuit breaker open - Realtime service unavailable",
@@ -405,7 +354,7 @@ class LLMClient:
                 retry_after=e.retry_after,
             ) from e
 
-    async def _do_classify_audio_realtime(  # noqa: PLR0912, PLR0915
+    async def _classify_audio_internal(  # noqa: PLR0912, PLR0915
         self,
         audio: bytes,
         channel: str,
