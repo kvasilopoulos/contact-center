@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from app.core import Settings
 from app.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from app.prompts import registry
-from app.services.audio_utils import (
+from app.utils.audio import (
     AudioFormatError,
     convert_wav_to_pcm16_24khz,
     detect_audio_format,

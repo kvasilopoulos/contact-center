@@ -1,4 +1,4 @@
-"""Workflow router: dispatches to the appropriate workflow by category."""
+"""Workflow dispatch: routes classified messages to category-specific workflows."""
 
 from typing import Any
 

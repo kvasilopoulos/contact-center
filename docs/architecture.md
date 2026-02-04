@@ -130,5 +130,5 @@ POST /api/v1/classify/{request_id}/feedback
 
 - **Entry:** `main.py` → `create_app()` in `app/factory.py` (middleware, routes, exception handlers).
 - **Core:** Config, logging, telemetry in `app/core/`.
-- **Request path:** Middleware → API (`/api/v1`), docs, or QA UI. Classification: `app/api/v1/endpoints/classify.py` → `Classifier` → `app/services/workflow_router.py` → workflows in `app/workflows/`.
-- **Where to look:** App assembly → `app/factory.py`. Classify request → `classify.py` → `Classifier` → `workflow_router.py` → workflows.
+- **Request path:** Middleware → API (`/api/v1`), docs, or QA UI. Classification: `app/api/v1/endpoints/classify.py` → `Classifier` → `app/services/dispatch.py` → workflows in `app/workflows/`.
+- **Where to look:** App assembly → `app/factory.py`. Classify request → `classify.py` → `Classifier` → `dispatch.py` → workflows.

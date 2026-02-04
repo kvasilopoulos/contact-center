@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from app.core import Settings, get_settings, record_classification
 from app.schemas import ClassificationRequest, ClassificationResponse, NextStepInfo
 from app.services.classification import ClassificationError, Classifier
-from app.services.workflow_router import execute_workflow
+from app.services.dispatch import execute_workflow
 
 logger = logging.getLogger(__name__)
 
