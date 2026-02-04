@@ -1,7 +1,4 @@
-"""Service action category workflow.
-
-Handles messages requesting actions like ticket creation, order tracking, refunds, etc.
-"""
+"""Service action workflow: handles tickets, orders, refunds, etc."""
 
 import logging
 import re
@@ -13,34 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 class ServiceActionWorkflow(BaseWorkflow):
-    """Workflow for handling service action requests.
-
-    This workflow:
-    1. Extracts the intent and relevant entities from the message
-    2. Prepares the action template (ticket, order lookup, etc.)
-    3. Returns next steps for the appropriate external system
-    """
+    """Routes service requests to appropriate handlers based on intent."""
 
     @property
     def category(self) -> str:
         return "service_action"
 
     async def execute(
-        self,
-        message: str,
-        confidence: float,
-        metadata: dict[str, Any],
+        self, message: str, confidence: float, metadata: dict[str, Any]
     ) -> WorkflowResult:
-        """Execute the service action workflow.
-
-        Args:
-            message: The customer's service request.
-            confidence: Classification confidence score.
-            metadata: Additional context including order_id, customer_id, etc.
-
-        Returns:
-            WorkflowResult with action details and external system info.
-        """
         logger.info(
             "Executing service action workflow",
             extra={
@@ -80,17 +58,8 @@ class ServiceActionWorkflow(BaseWorkflow):
         return await handler(message, metadata)
 
     def _extract_intent(self, message: str) -> str:
-        """Extract the action intent from the message.
-
-        Args:
-            message: The customer's message.
-
-        Returns:
-            Extracted intent string.
-        """
+        """Extract action intent from message using pattern matching."""
         message_lower = message.lower()
-
-        # Intent patterns - ordered by priority
         intent_patterns = [
             (r"\b(cancel|cancellation)\b", "cancel_order"),
             (r"\b(refund|money back|reimburse)\b", "request_refund"),

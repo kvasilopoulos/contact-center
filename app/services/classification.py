@@ -1,4 +1,4 @@
-"""AI Classifier service for message categorization."""
+"""AI Classifier for message categorization."""
 
 from dataclasses import dataclass
 import logging
@@ -31,16 +31,10 @@ class ClassificationResult:
     model: str = ""
 
 
-class ClassifierService:
-    """Service for classifying customer messages using AI."""
+class Classifier:
+    """Classifies customer messages using AI."""
 
     def __init__(self, settings: Settings, llm_client: LLMClient | None = None) -> None:
-        """Initialize the classifier service.
-
-        Args:
-            settings: Application settings.
-            llm_client: Optional LLM client instance. Created if not provided.
-        """
         self.settings = settings
         self.llm_client = llm_client or LLMClient(settings)
 

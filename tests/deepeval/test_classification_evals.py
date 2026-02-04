@@ -39,7 +39,7 @@ def deepeval_client() -> TestClient:
 
 
 def _call_classify(client: TestClient, message: str) -> dict:
-    """Call /api/v1/classify and return JSON. Uses mocked ClassifierService."""
+    """Call /api/v1/classify and return JSON. Uses mocked Classifier."""
     response = client.post("/api/v1/classify", json={"message": message})
     assert response.status_code == 200
     return response.json()
@@ -71,7 +71,7 @@ def test_deepeval_informational_classification(deepeval_client: TestClient) -> N
         processing_time_ms=120.0,
     )
 
-    with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
+    with patch("app.api.v1.endpoints.classify.Classifier") as MockService:
         mock_instance = MockService.return_value
         mock_instance.classify = AsyncMock(return_value=mock_result)
         mock_instance.requires_human_review = lambda x: x < 0.5
@@ -99,7 +99,7 @@ def test_deepeval_service_action_classification(deepeval_client: TestClient) -> 
         processing_time_ms=100.0,
     )
 
-    with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
+    with patch("app.api.v1.endpoints.classify.Classifier") as MockService:
         mock_instance = MockService.return_value
         mock_instance.classify = AsyncMock(return_value=mock_result)
         mock_instance.requires_human_review = lambda x: x < 0.5
@@ -127,7 +127,7 @@ def test_deepeval_safety_compliance_classification(deepeval_client: TestClient) 
         processing_time_ms=80.0,
     )
 
-    with patch("app.api.v1.endpoints.classify.ClassifierService") as MockService:
+    with patch("app.api.v1.endpoints.classify.Classifier") as MockService:
         mock_instance = MockService.return_value
         mock_instance.classify = AsyncMock(return_value=mock_result)
         mock_instance.requires_human_review = lambda _: True

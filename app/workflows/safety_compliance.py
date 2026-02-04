@@ -1,8 +1,4 @@
-"""Safety compliance category workflow.
-
-Handles messages involving health/safety concerns, adverse reactions, and medical issues.
-These require special handling for regulatory compliance.
-"""
+"""Safety compliance workflow: handles health concerns and adverse reactions."""
 
 from datetime import datetime, timezone
 import hashlib
@@ -10,29 +6,19 @@ import logging
 import re
 from typing import Any, ClassVar
 
+from app.utils.pii_redaction import redact_pii
 from app.workflows.base import BaseWorkflow, WorkflowResult
 
 logger = logging.getLogger(__name__)
 
 
 class SafetyComplianceWorkflow(BaseWorkflow):
-    """Workflow for handling safety and compliance-related messages.
-
-    This workflow:
-    1. Flags the message as urgent for compliance review
-    2. Creates an audit trail entry
-    3. Redacts PII for logging purposes
-    4. Routes to appropriate escalation queue
-
-    IMPORTANT: Safety compliance messages are always treated as high priority
-    and require human review regardless of confidence score.
-    """
+    """Routes safety concerns to compliance review. Always requires human review."""
 
     @property
     def category(self) -> str:
         return "safety_compliance"
 
-    # Patterns indicating severity levels
     URGENT_PATTERNS: ClassVar[list[str]] = [
         r"\b(emergency|ER|hospital|ambulance|911)\b",
         r"\b(can't breathe|difficulty breathing|chest pain)\b",
@@ -49,21 +35,8 @@ class SafetyComplianceWorkflow(BaseWorkflow):
     ]
 
     async def execute(
-        self,
-        message: str,
-        confidence: float,
-        metadata: dict[str, Any],
+        self, message: str, confidence: float, metadata: dict[str, Any]
     ) -> WorkflowResult:
-        """Execute the safety compliance workflow.
-
-        Args:
-            message: The customer's message with safety/health concerns.
-            confidence: Classification confidence score.
-            metadata: Additional context.
-
-        Returns:
-            WorkflowResult with compliance handling instructions.
-        """
         logger.warning(
             "Safety compliance workflow triggered",
             extra={
@@ -86,7 +59,7 @@ class SafetyComplianceWorkflow(BaseWorkflow):
         await self._log_to_compliance_system(compliance_record)
 
         # Redact PII for response
-        redacted_summary = self._redact_pii(message[:200])
+        redacted_summary = redact_pii(message[:200])
 
         if severity == "urgent":
             return WorkflowResult(
@@ -146,17 +119,9 @@ class SafetyComplianceWorkflow(BaseWorkflow):
             )
 
     def _assess_severity(self, message: str) -> str:
-        """Assess the severity of the safety concern.
-
-        Args:
-            message: The customer's message.
-
-        Returns:
-            Severity level: 'urgent', 'high', or 'standard'.
-        """
+        """Return 'urgent', 'high', or 'standard' based on message patterns."""
         message_lower = message.lower()
 
-        # Check for urgent patterns
         for pattern in self.URGENT_PATTERNS:
             if re.search(pattern, message_lower):
                 logger.warning("Urgent safety concern detected")
@@ -170,21 +135,9 @@ class SafetyComplianceWorkflow(BaseWorkflow):
         return "standard"
 
     def _create_compliance_record(
-        self,
-        message: str,
-        severity: str,
-        metadata: dict[str, Any],
+        self, message: str, severity: str, metadata: dict[str, Any]
     ) -> dict[str, Any]:
-        """Create a compliance/audit record.
-
-        Args:
-            message: The original message.
-            severity: Assessed severity level.
-            metadata: Additional context.
-
-        Returns:
-            Compliance record dictionary.
-        """
+        """Create audit trail record for compliance tracking."""
         record_id = f"COMP-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{self._hash_message(message)[:8]}"
 
         return {
@@ -202,17 +155,7 @@ class SafetyComplianceWorkflow(BaseWorkflow):
         }
 
     async def _log_to_compliance_system(self, record: dict[str, Any]) -> None:
-        """Log the compliance record to the compliance system.
-
-        In production, this would integrate with a real compliance/audit system.
-
-        Args:
-            record: The compliance record to log.
-        """
-        # Stub implementation - in production, this would:
-        # 1. Write to a secure, immutable audit log
-        # 2. Potentially notify compliance officers
-        # 3. Create FDA adverse event report if required
+        """Log compliance record to audit system."""
         logger.info(
             "Compliance record created",
             extra={
@@ -223,57 +166,9 @@ class SafetyComplianceWorkflow(BaseWorkflow):
         )
 
     def _hash_message(self, message: str) -> str:
-        """Create a hash of the message for audit purposes.
-
-        Args:
-            message: The message to hash.
-
-        Returns:
-            SHA-256 hash of the message.
-        """
+        """Create a hash of the message for audit purposes."""
         return hashlib.sha256(message.encode()).hexdigest()
 
-    def _redact_pii(self, text: str) -> str:
-        """Redact personally identifiable information from text.
-
-        Args:
-            text: Text potentially containing PII.
-
-        Returns:
-            Text with PII redacted.
-        """
-        # Email addresses
-        text = re.sub(r"\b[\w.-]+@[\w.-]+\.\w+\b", "[EMAIL REDACTED]", text)
-
-        # Phone numbers (various formats)
-        text = re.sub(
-            r"\b(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b",
-            "[PHONE REDACTED]",
-            text,
-        )
-
-        # SSN
-        text = re.sub(r"\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b", "[SSN REDACTED]", text)
-
-        # Credit card numbers (basic pattern)
-        text = re.sub(r"\b\d{4}[-.\s]?\d{4}[-.\s]?\d{4}[-.\s]?\d{4}\b", "[CARD REDACTED]", text)
-
-        # Names after common prefixes (basic)
-        text = re.sub(
-            r"\b(Mr\.|Mrs\.|Ms\.|Dr\.)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b",
-            r"\1 [NAME REDACTED]",
-            text,
-        )
-
-        return text
-
     def requires_escalation(self, confidence: float) -> bool:  # noqa: ARG002
-        """Safety compliance always requires human review.
-
-        Args:
-            confidence: Classification confidence score.
-
-        Returns:
-            Always True for safety compliance.
-        """
-        return True  # Safety compliance always needs human review
+        """Safety compliance always requires human review."""
+        return True

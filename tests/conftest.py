@@ -13,7 +13,7 @@ from app.main import app
 from app.prompts import get_registry, load_prompts
 from app.prompts.template import LLMConfig, PromptMetadata, PromptParameter, PromptTemplate
 from app.schemas.llm_responses import ClassificationLLMResponse
-from app.services.classification import ClassifierService
+from app.services.classification import Classifier
 from app.services.llm import LLMClient
 
 
@@ -71,9 +71,9 @@ def mock_llm_client(test_settings: Settings) -> MagicMock:  # noqa: ARG001
 
 
 @pytest.fixture
-def classifier_service(test_settings: Settings, mock_llm_client: MagicMock) -> ClassifierService:
-    """Create a classifier service with mock LLM client."""
-    return ClassifierService(settings=test_settings, llm_client=mock_llm_client)
+def classifier(test_settings: Settings, mock_llm_client: MagicMock) -> Classifier:
+    """Create a classifier with mock LLM client."""
+    return Classifier(settings=test_settings, llm_client=mock_llm_client)
 
 
 @pytest.fixture

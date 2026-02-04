@@ -1,7 +1,4 @@
-"""Informational category workflow.
-
-Handles messages seeking information about policies, products, FAQs, etc.
-"""
+"""Informational workflow: handles FAQ and policy questions."""
 
 import logging
 import re
@@ -11,8 +8,6 @@ from app.workflows.base import BaseWorkflow, WorkflowResult
 
 logger = logging.getLogger(__name__)
 
-
-# Mock FAQ/Knowledge Base for demonstration
 FAQ_DATABASE = {
     "refund": {
         "question": "What is your refund policy?",
@@ -62,34 +57,15 @@ FAQ_DATABASE = {
 
 
 class InformationalWorkflow(BaseWorkflow):
-    """Workflow for handling informational inquiries.
-
-    This workflow:
-    1. Searches the FAQ/knowledge base for relevant information
-    2. Returns matched information or suggests contact options
-    3. Low confidence queries are flagged for human review
-    """
+    """Searches FAQ database and returns relevant information."""
 
     @property
     def category(self) -> str:
         return "informational"
 
     async def execute(
-        self,
-        message: str,
-        confidence: float,
-        metadata: dict[str, Any],  # noqa: ARG002
+        self, message: str, confidence: float, metadata: dict[str, Any]  # noqa: ARG002
     ) -> WorkflowResult:
-        """Execute the informational workflow.
-
-        Args:
-            message: The customer's question or inquiry.
-            confidence: Classification confidence score.
-            metadata: Additional context.
-
-        Returns:
-            WorkflowResult with information or escalation instructions.
-        """
         logger.info(
             "Executing informational workflow",
             extra={
@@ -144,18 +120,9 @@ class InformationalWorkflow(BaseWorkflow):
         )
 
     def _search_faq(self, message: str) -> dict[str, Any] | None:
-        """Search the FAQ database for relevant information.
-
-        Args:
-            message: The customer's message to search for.
-
-        Returns:
-            Matching FAQ entry or None if no match found.
-        """
+        """Search FAQ database for matching entry."""
         message_lower = message.lower()
 
-        # Simple keyword matching for demonstration
-        # In production, this would use semantic search or a proper search engine
         for keyword, faq_entry in FAQ_DATABASE.items():
             if keyword in message_lower:
                 logger.debug("FAQ match found", extra={"keyword": keyword})

@@ -2,7 +2,7 @@
 
 A scalable FastAPI service that classifies customer messages into categories (informational, service_action, safety_compliance) using AI, with end-to-end workflows for each category.
 
-**Where to look**: To see how the app is built, open `app/factory.py`. To follow a classify request, start at `app/api/v1/endpoints/classify.py` → `ClassifierService` → `app/services/workflow_router.py` → workflows. See [System Architecture](docs/architecture.md) for the full application flow.
+**Where to look**: To see how the app is built, open `app/factory.py`. To follow a classify request, start at `app/api/v1/endpoints/classify.py` → `Classifier` → `app/services/workflow_router.py` → workflows. See [System Architecture](docs/architecture.md) for the full application flow.
 
 ## Features
 

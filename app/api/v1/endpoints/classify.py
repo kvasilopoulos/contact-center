@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.core import Settings, get_settings, record_classification
 from app.schemas import ClassificationRequest, ClassificationResponse, NextStepInfo
-from app.services.classification import ClassificationError, ClassifierService
+from app.services.classification import ClassificationError, Classifier
 from app.services.workflow_router import execute_workflow
 
 logger = logging.getLogger(__name__)
@@ -38,11 +38,11 @@ if _CONFIDENT_API_KEY:
 router = APIRouter(tags=["Classification"])
 
 
-def get_classifier_service(
+def get_classifier(
     settings: Settings = Depends(get_settings),
-) -> ClassifierService:
-    """Dependency to get the classifier service."""
-    return ClassifierService(settings)
+) -> Classifier:
+    """Dependency to get the classifier."""
+    return Classifier(settings)
 
 
 @router.post(
@@ -66,7 +66,7 @@ def get_classifier_service(
 async def classify_message(
     request: Request,
     payload: ClassificationRequest,
-    classifier: ClassifierService = Depends(get_classifier_service),
+    classifier: Classifier = Depends(get_classifier),
 ) -> ClassificationResponse:
     """Classify a customer message and return category with next steps.
 
@@ -175,7 +175,7 @@ async def classify_voice_message(
         default=None,
         description="Optional JSON-encoded metadata about the message context.",
     ),
-    classifier: ClassifierService = Depends(get_classifier_service),
+    classifier: Classifier = Depends(get_classifier),
 ) -> ClassificationResponse:
     """Classify a customer voice message by sending audio to the Realtime model."""
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))

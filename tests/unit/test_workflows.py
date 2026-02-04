@@ -281,7 +281,7 @@ class TestSafetyComplianceWorkflow:
         assert result.data is not None
         assert "redacted_summary" in result.data
         assert "john@example.com" not in result.data["redacted_summary"]
-        assert "[EMAIL REDACTED]" in result.data["redacted_summary"]
+        assert "[EMAIL_REDACTED]" in result.data["redacted_summary"]
 
     @pytest.mark.asyncio
     async def test_always_requires_escalation(self, workflow: SafetyComplianceWorkflow) -> None:
