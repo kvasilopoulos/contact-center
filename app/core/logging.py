@@ -1,4 +1,4 @@
-"""Production-grade JSON logging configuration using the standard library.
+"""Logging configuration: human-readable for development, JSON for production.
 
 Configure once at application startup. Use structured logs via the extra dict:
     logger.info("message", extra={"key": value})
@@ -18,7 +18,7 @@ THIRD_PARTY_LOGGER_LEVELS: dict[str, str] = {
     "watchfiles": "WARNING",
 }
 
-# Standard LogRecord attribute names to exclude from the JSON payload (extra only).
+# Standard LogRecord attribute names to exclude from extra-field output.
 _RECORD_ATTRS = frozenset(
     {
         "name",
@@ -47,8 +47,17 @@ _RECORD_ATTRS = frozenset(
     }
 )
 
-# Third-party / display-only attributes to never include in JSON (e.g. ANSI color codes).
-_JSON_EXCLUDE_EXTRAS = frozenset({"color_message"})
+# Third-party / display-only attributes to never include in output (e.g. ANSI color codes).
+_EXCLUDE_EXTRAS = frozenset({"color_message"})
+
+
+def _extra_fields(record: logging.LogRecord) -> dict[str, Any]:
+    """Extract user-supplied extra fields from a log record."""
+    return {
+        key: value
+        for key, value in record.__dict__.items()
+        if key not in _RECORD_ATTRS and key not in _EXCLUDE_EXTRAS and value is not None
+    }
 
 
 class JsonFormatter(logging.Formatter):
@@ -61,35 +70,61 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        for key, value in record.__dict__.items():
-            if key not in _RECORD_ATTRS and key not in _JSON_EXCLUDE_EXTRAS and value is not None:
-                payload[key] = value
+        payload.update(_extra_fields(record))
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         return json.dumps(payload, default=str) + "\n"
 
 
+class DevFormatter(logging.Formatter):
+    """Human-readable formatter for local development.
+
+    Output example:
+        2025-01-15 10:23:45 | INFO     | app.factory | Starting application  app=MyApp version=0.1.0
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        ts = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
+        level = record.levelname.ljust(8)
+        message = record.getMessage()
+
+        extras = _extra_fields(record)
+        extras_str = "  " + " ".join(f"{k}={v}" for k, v in extras.items()) if extras else ""
+
+        line = f"{ts} | {level} | {record.name} | {message}{extras_str}"
+
+        if record.exc_info:
+            exc_text = self.formatException(record.exc_info)
+            indented = "\n".join(f"  {l}" for l in exc_text.splitlines())
+            line = f"{line}\n{indented}"
+
+        return line
+
+
 def configure_logging(
     level: str | int = "INFO",
+    *,
+    environment: str = "production",
     stream: Any = None,
     logger_levels: dict[str, str | int] | None = None,
 ) -> None:
-    """Configure root logger with JSON output. Call once at application startup.
+    """Configure root logger. Call once at application startup.
 
     Args:
         level: Root logger level (e.g. "INFO", logging.INFO).
+        environment: "development" for human-readable output, anything else for JSON.
         stream: Output stream; defaults to sys.stdout.
-        logger_levels: Optional mapping of logger names to levels, e.g.
-            {"uvicorn": "WARNING", "watchfiles": "WARNING"} to reduce noise from
-            third-party loggers.
+        logger_levels: Optional mapping of logger names to levels.
     """
     if stream is None:
         stream = sys.stdout
     root = logging.getLogger()
     root.setLevel(level if isinstance(level, int) else getattr(logging, level.upper()))
     root.handlers.clear()
+
     handler = logging.StreamHandler(stream)
-    handler.setFormatter(JsonFormatter())
+    formatter = DevFormatter() if environment == "development" else JsonFormatter()
+    handler.setFormatter(formatter)
     handler.setLevel(root.level)
     root.addHandler(handler)
 
@@ -99,4 +134,9 @@ def configure_logging(
         log.setLevel(lvl if isinstance(lvl, int) else getattr(logging, lvl.upper()))
 
 
-__all__ = ["THIRD_PARTY_LOGGER_LEVELS", "JsonFormatter", "configure_logging"]
+__all__ = [
+    "THIRD_PARTY_LOGGER_LEVELS",
+    "DevFormatter",
+    "JsonFormatter",
+    "configure_logging",
+]

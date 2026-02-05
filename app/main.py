@@ -3,5 +3,6 @@
 from app.core import configure_logging, get_settings
 from app.factory import create_app
 
-configure_logging(get_settings().log_level)
+_settings = get_settings()
+configure_logging(_settings.log_level, environment=_settings.environment)
 app = create_app()
