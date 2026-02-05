@@ -116,7 +116,7 @@ class LLMClient:
     ) -> T:
         """Internal method to perform LLM call with structured output parsing.
 
-        Uses OpenAI's beta.chat.completions.parse() for automatic validation.
+        Uses OpenAI's Responses API (client.responses.parse()) for automatic validation.
 
         Args:
             model: Model name to use.
@@ -144,36 +144,36 @@ class LLMClient:
                 },
             )
 
-            response = await self.client.beta.chat.completions.parse(
+            response = await self.client.responses.parse(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                instructions=system_prompt,
+                input=user_prompt,
                 temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_model,
+                max_output_tokens=max_tokens,
+                text_format=response_model,
+                store=False,
             )
 
-            message = response.choices[0].message
-
-            # Check for refusal
-            if message.refusal:
-                logger.warning(
-                    "LLM refused to respond",
-                    extra={"refusal": message.refusal, "model": model},
-                )
-                raise LLMRefusalError(
-                    "LLM refused to generate response",
-                    refusal=message.refusal,
-                )
+            # Check for refusal in output content
+            for output_item in response.output:
+                if output_item.type == "message":
+                    for content in output_item.content:
+                        if content.type == "refusal":
+                            logger.warning(
+                                "LLM refused to respond",
+                                extra={"refusal": content.refusal, "model": model},
+                            )
+                            raise LLMRefusalError(
+                                "LLM refused to generate response",
+                                refusal=content.refusal,
+                            )
 
             # Get parsed response
-            parsed = message.parsed
+            parsed = response.output_parsed
             if parsed is None:
                 raise LLMParseError(
                     "LLM response was not parsed successfully",
-                    raw_content=message.content,
+                    raw_content=response.output_text,
                 )
 
             logger.debug(

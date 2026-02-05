@@ -21,19 +21,23 @@ class Settings(BaseSettings):
     )
 
     # Application
-    app_name: str = "Contact Center AI Orchestrator"
+    app_name: str = "Contact Center"
     app_version: str = "0.1.0"
-    environment: Literal["development", "staging", "production"] = "development"
-    debug: bool = False
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    environment: Literal["development", "staging", "production"] = Field(
+        default="development", description="The environment the application is running in"
+    )
+    debug: bool = Field(default=False, description="Whether to run the application in debug mode")
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
+        default="INFO", description="The log level to use"
+    )
 
     # Server
-    host: str = "0.0.0.0"
-    port: int = 8000
+    host: str = Field(default="0.0.0.0", description="The host to bind the server to")
+    port: int = Field(default=8000, description="The port to bind the server to")
 
     # OpenAI Configuration
     openai_api_key: SecretStr = Field(default=SecretStr(""))
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "gpt-4.1"
     # Realtime model for audio-based interactions (WebSocket API)
     openai_realtime_model: str = "gpt-4o-realtime-preview"
     openai_timeout: float = 30.0

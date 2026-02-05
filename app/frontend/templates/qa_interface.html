@@ -74,7 +74,9 @@
             margin: 0 auto;
             width: 100%;
             padding: 1.5rem;
-            align-items: stretch;
+            /* Let each panel shrink to its content height so there is no
+               extra blank space at the bottom of the input or pipeline cards. */
+            align-items: start;
             overflow: visible;
         }
 
@@ -508,13 +510,15 @@
 
         /* Workflow Steps - expand to fill panel */
         .workflow-steps {
-            padding: 1rem;
+            /* Extra vertical padding so the pipeline column visually
+               matches the height of the input panel without forcing
+               the card itself to stretch. */
+            padding: 2.5rem 1.5rem 4.5rem 1.25rem;
             overflow: visible;
             position: relative;
-            flex: 1;
             display: flex;
             flex-direction: column;
-            justify-content: space-evenly;
+            gap: 0.75rem;
         }
 
         .workflow-step {
@@ -532,8 +536,12 @@
             content: '';
             position: absolute;
             left: 13px;
-            top: 28px;
-            bottom: calc(-0.5rem - 28px);
+            /* Draw a continuous connector line that always reaches the next step.
+               The line runs the full height of the step container, and the step
+               indicator (z-index: 1) sits on top, so the visible line appears to
+               start and end at the indicator without gaps. */
+            top: 0;
+            bottom: -0.75rem;
             width: 2px;
             background: var(--border);
             transition: background 300ms ease;
@@ -1157,8 +1165,8 @@
 
             .workflow-step:not(:last-child)::before {
                 left: 13px;
-                top: 28px;
-                bottom: 0;
+                top: 0;
+                bottom: -0.75rem;
                 width: 2px;
                 height: auto;
                 transform: none;

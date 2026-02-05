@@ -1,348 +1,126 @@
-# Cost Center AI Orchestrator
+# Contact Center AI Orchestrator
 
-A scalable FastAPI service that classifies customer messages into categories (informational, service_action, safety_compliance) using AI, with end-to-end workflows for each category.
+An AI-powered message classification and routing service built with FastAPI. The system ingests customer messages from multiple channels, classifies them through an LLM, and dispatches each to a domain-specific workflow that determines the next action.
 
-**Where to look**: To see how the app is built, open `app/factory.py`. To follow a classify request, start at `app/api/v1/endpoints/classify.py` → `Classifier` → `app/services/dispatch.py` → workflows. See [System Architecture](docs/architecture.md) for the full application flow.
+**Start here:** [docs/overview](docs/overview.md) for the full project narrative, or open `app/factory.py` to see how the application is assembled. To trace a single request end-to-end, follow `app/api/v1/endpoints/classify.py` into the `Classifier` service, then into `app/services/dispatch.py` and the individual workflows.
 
-## Features
+---
 
-- **AI-Powered Classification**: Single LLM call using OpenAI GPT-4o-mini
-- **Three Categories**:
-  - `informational`: Policy questions, FAQs, product inquiries
-  - `service_action`: Ticket creation, order tracking, refunds
-  - `safety_compliance`: Adverse reactions, health concerns (priority handling)
-- **Multi-Channel Support**: Designed for chat, voice, and mail (chat implemented)
-- **Workflow Automation**: Category-specific workflows with next-step recommendations
-- **Production Ready**: Docker, CI/CD, monitoring, comprehensive tests
+## Why This Architecture
+
+A contact center receives messages that vary wildly in urgency and intent. A question about refund policy, a request to cancel an order, and a report of an adverse drug reaction all arrive through the same channel but demand completely different handling. The core design challenge is to separate *understanding what the message is* from *deciding what to do about it*, so each concern can evolve independently.
+
+The system addresses this with a two-phase pipeline: a single LLM call classifies the message into one of three categories, and a strategy-pattern workflow engine executes the appropriate business logic. Every resilience mechanism, from rate limiting to circuit breaking, exists to keep this pipeline responsive under real-world conditions where external dependencies are neither infinitely available nor perfectly reliable.
+
+---
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.11+
-- [uv](https://github.com/astral-sh/uv) - Fast Python package manager
+- [uv](https://github.com/astral-sh/uv) (fast Python package manager)
 - OpenAI API key
-- Docker (optional)
-- [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/) (optional, for public demos)
 
-### Installation
+### Install and Run
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd cost-center-orchestrator
-
-# Install uv if you haven't already
-# On macOS/Linux:
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# On Windows:
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# Install all dependencies (including dev dependencies)
 uv sync
-
-# Copy environment file
-cp .env.example .env
-
-# Edit .env and add your OpenAI API key
+cp .env.example .env        # then add your OPENAI_API_KEY
+make run                     # or: uvicorn app.main:app --reload --port 8000
 ```
 
-> **Note**: This project uses `uv` for dependency management. The `uv sync` command reads `pyproject.toml` and creates/updates the `uv.lock` file, ensuring reproducible builds across all environments.
-
-### Running the Service
+### Docker
 
 ```bash
-# Development server
-make run
-
-# Or directly with uvicorn
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### 🌐 Public Demo with Cloudflare Tunnel
-
-Want to share your local API publicly? Use the built-in tunnel with automatic DNS updates:
-
-```bash
-# Quick setup (2 minutes)
-# See QUICK_START.md for detailed instructions
-
-# 1. Get Netlify token and add to .env
-# 2. Start your API
-make run
-
-# 3. Start tunnel (in another terminal)
-make tunnel
-```
-
-Your API will be automatically available at `https://demo.kvasilopoulos.com` with automatic DNS updates! 
-
-📖 **Full guide:** [QUICK_START.md](QUICK_START.md) | [Token Setup](docs/NETLIFY_TOKEN_SETUP.md)
-
-### Using Docker
-
-```bash
-# Build and run with docker-compose
 docker-compose up --build
-
-# Or build manually
-docker build -t cost-center-orchestrator .
-docker run -p 8000:8000 -e OPENAI_API_KEY=your-key cost-center-orchestrator
 ```
-
-## Deployment Options
-
-### 🚀 Option 1: Render.com (Easiest - Free Tier Available)
-
-Deploy to the cloud in 5 minutes with free HTTPS:
-
-1. Push your code to GitHub
-2. Go to https://render.com and sign up
-3. Click "New +" → "Blueprint"
-4. Connect your repo (will detect `render.yaml`)
-5. Set `OPENAI_API_KEY` environment variable
-6. Deploy!
-
-**Result:** Your API at `https://your-app.onrender.com`
-
-📖 **Full guide:** [docs/RENDER_DEPLOYMENT.md](docs/RENDER_DEPLOYMENT.md)
-
-**Free tier:** Perfect for demos (sleeps after 15 min inactivity)  
-**Paid tier:** $7/month for always-on service
-
-### ☁️ Option 2: AWS Fargate (Production-Ready)
-
-Deploy to AWS Fargate with Terraform in ~10 minutes:
-
-```bash
-# Set OpenAI API key
-export TF_VAR_openai_api_key="sk-..."
-
-# Deploy infrastructure
-cd terraform
-terraform init
-terraform apply
-
-# Build and push Docker image
-./scripts/deploy.sh push
-```
-
-**Features:**
-- ✅ Serverless containers with AWS Fargate
-- ✅ Uses default VPC (no custom networking)
-- ✅ Auto-scaling based on CPU and memory
-- ✅ Application Load Balancer
-- ✅ Secure secrets management
-- ✅ Simple single-file Terraform configuration
-
-**Documentation:**
-- 📘 [Terraform README](terraform/README.md) - Complete deployment guide
-
-**Estimated Cost:** ~$90/month (2 tasks with 0.5 vCPU, 1 GB each)
-
-## API Usage
 
 ### Classify a Message
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/classify \
   -H "Content-Type: application/json" \
-  -d '{
-    "message": "What is your refund policy for prescription products?",
-    "channel": "chat"
-  }'
+  -d '{"message": "I am experiencing side effects from my medication", "channel": "chat"}'
 ```
 
-**Response:**
-```json
-{
-  "request_id": "abc123",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "category": "informational",
-  "confidence": 0.95,
-  "decision_path": "Customer asking about refund policy - informational inquiry",
-  "next_step": {
-    "action": "provide_information",
-    "description": "Found relevant FAQ: We offer a 30-day refund policy...",
-    "priority": "low",
-    "requires_human_review": false
-  },
-  "processing_time_ms": 245.5
-}
-```
+---
 
-### Health Check
+## Documentation
 
-```bash
-# Liveness
-curl http://localhost:8000/api/v1/health
+| Document | What It Covers |
+|----------|---------------|
+| [Overview](docs/overview.md) | End-to-end project narrative: problem, solution, and design philosophy |
+| [Solution Design](docs/solution-design.md) | Architecture rationale: why each pattern was chosen and what trade-offs were accepted |
+| [System Architecture](docs/architecture.md) | Component diagrams, request flow, workflow behavior, and API surface |
+| [Evaluation & Testing](docs/evaluation.md) | Test strategy, quality gates, and the feedback loop for continuous improvement |
+| [AWS Deployment](docs/aws.md) | ECS Fargate deployment with Terraform |
+| [Frontend](docs/frontend.md) | Documentation UI rendering system |
 
-# Readiness
-curl http://localhost:8000/api/v1/ready
-```
+---
 
-### API Documentation
-
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- OpenAPI JSON: http://localhost:8000/openapi.json
-
-## Project Structure
+## Project Layout
 
 ```
-cost-center-orchestrator/
-├── app/
-│   ├── api/v1/endpoints/     # API endpoints
-│   ├── config/               # Configuration
-│   ├── models/               # Pydantic models
-│   ├── services/             # Business logic
-│   └── workflows/            # Category workflows
-├── tests/
-│   ├── unit/                 # Unit tests
-│   └── integration/          # Integration tests
-├── Dockerfile                # Production container
-├── docker-compose.yml        # Local run
-├── .github/workflows/        # CI/CD pipelines
-└── docs/                     # Documentation
+app/
+├── main.py                        # Entry: settings, logging, app creation
+├── factory.py                     # Application assembly (middleware, routes, handlers)
+├── core/                          # Configuration, logging, telemetry
+├── api/v1/endpoints/              # HTTP endpoints (classify, health)
+├── middleware/                     # Rate limiting, circuit breaker
+├── services/                      # Classification, LLM client, workflow dispatch
+├── workflows/                     # Category-specific business logic
+├── prompts/                       # Versioned prompt templates (YAML + Jinja2)
+├── schemas/                       # Request/response models (Pydantic)
+└── utils/                         # PII redaction, audio conversion
+tests/
+├── unit/                          # Component isolation
+├── integration/                   # API contract validation
+├── e2e/                           # Full classification flow
+├── deepeval/                      # LLM output quality (GEval)
+└── load/                          # Locust performance scenarios
 ```
 
-## Development
-
-This project uses modern Python tooling from Astral for an extremely fast and consistent development experience:
-
-- **[uv](https://github.com/astral-sh/uv)** - Ultra-fast package manager and dependency resolver
-- **[Ruff](https://github.com/astral-sh/ruff)** - Lightning-fast linter and formatter (replaces Black, isort, flake8)
-- **[ty](https://github.com/astral-sh/ty)** - Extremely fast Python type checker (10x-100x faster than mypy/Pyright), written in Rust
-
-### Running Tests
-
-```bash
-# Run all tests
-make test
-
-# Run with coverage
-make test-cov
-
-# Run specific test file
-uv run pytest tests/unit/test_classifier.py -v
-```
-
-### Code Quality
-
-#### Linting and Formatting
-
-This project uses **Ruff** for both linting and formatting:
-
-```bash
-# Lint code (check for issues)
-make lint
-# or: uv run ruff check app/ tests/
-
-# Format code (auto-fix formatting)
-make format
-# or: uv run ruff format app/ tests/
-
-# Format and fix linting issues
-uv run ruff format app/ tests/
-uv run ruff check --fix app/ tests/
-```
-
-Ruff configuration is in `pyproject.toml` under `[tool.ruff]`:
-- Line length: 100 characters
-- Enabled rules: pycodestyle, Pyflakes, isort, flake8-bugbear, pyupgrade, and more
-- Auto-formatting with double quotes and proper imports
-
-#### Type Checking
-
-This project uses **ty**, Astral's extremely fast type checker (10x-100x faster than mypy):
-
-```bash
-# Run type checker
-make type-check
-# or: uv run ty check app/
-```
-
-ty configuration is in `pyproject.toml` under `[tool.ty]`. ty automatically provides:
-- Comprehensive diagnostics with rich contextual information
-- Support for partially typed code
-- Advanced typing features (intersection types, sophisticated narrowing)
-- Fast incremental analysis
-
-#### Run All Checks
-
-```bash
-# Run lint, type-check, and test
-make check
-```
-
-### Pre-commit Hooks
-
-Pre-commit hooks automatically run uv, Ruff, and ty before each commit:
-
-```bash
-# Install hooks
-make install-dev
-# or: uv sync && pre-commit install
-
-# Run manually on all files
-pre-commit run --all-files
-
-# Update hooks to latest versions
-pre-commit autoupdate
-```
-
-**Hooks configured:**
-- **uv-lock**: Automatically updates `uv.lock` when `pyproject.toml` changes
-- **ruff**: Lints and auto-fixes Python code
-- **ruff-format**: Formats Python code
-- **ty**: Type checks Python code (extremely fast, from Astral)
-- **bandit**: Security vulnerability scanner
-- Plus standard hooks (trailing whitespace, YAML validation, etc.)
-
-### Package Management with uv
-
-```bash
-# Add a new dependency
-uv add <package-name>
-
-# Add a dev dependency
-uv add --dev <package-name>
-
-# Remove a dependency
-uv remove <package-name>
-
-# Update dependencies
-uv lock --upgrade
-
-# Sync environment to match lock file
-uv sync
-
-# Install production dependencies only
-uv sync --no-dev
-```
+---
 
 ## Configuration
 
-All configuration via environment variables:
+All configuration is managed through environment variables (via `pydantic-settings`):
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | (required) | OpenAI API key |
-| `OPENAI_MODEL` | `gpt-4o-mini` | Model to use |
-| `ENVIRONMENT` | `development` | Environment name |
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `MIN_CONFIDENCE_THRESHOLD` | `0.5` | Threshold for human review |
-| `RATE_LIMIT_REQUESTS_PER_MINUTE` | `60` | Rate limit |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OPENAI_API_KEY` | *(required)* | LLM provider credentials |
+| `OPENAI_MODEL` | `gpt-4.1` | Model selection |
+| `ENVIRONMENT` | `development` | Controls logging format (dev vs JSON) |
+| `LOG_LEVEL` | `INFO` | Logging verbosity |
+| `MIN_CONFIDENCE_THRESHOLD` | `0.5` | Below this, messages are escalated for human review |
+| `RATE_LIMIT_REQUESTS_PER_MINUTE` | `60` | Sustained request ceiling per client |
+| `CONFIDENT_API_KEY` | *(optional)* | Enables production telemetry via Confident AI |
 
-See `.env.example` for all options.
+See `.env.example` for the full list.
 
-## Architecture
+---
 
-See [docs/architecture.md](docs/architecture.md) for detailed architecture documentation including:
-- System design overview
-- Scalability approach
-- Workflow diagrams
-- Monitoring strategy
+## Development
+
+This project uses the Astral toolchain for speed and consistency:
+
+- **[uv](https://github.com/astral-sh/uv)** for dependency management
+- **[Ruff](https://github.com/astral-sh/ruff)** for linting and formatting (replaces Black + isort + flake8)
+- **[ty](https://github.com/astral-sh/ty)** for type checking (Rust-based, orders of magnitude faster than mypy)
+
+```bash
+make test          # Run all tests
+make test-cov      # Tests with coverage report
+make lint          # Ruff linting
+make format        # Ruff formatting
+make type-check    # ty type checking
+make check         # All of the above
+```
+
+Pre-commit hooks enforce Ruff, ty, and Bandit (security scanning) on every commit.
+
+---
 
 ## License
 

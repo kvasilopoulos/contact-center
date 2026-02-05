@@ -108,7 +108,7 @@ experiments:
         traffic: 0.2
       - name: cheap
         version: 1.0.0
-        model: gpt-4o-mini        # Model override
+        model: gpt-4.1            # Model override
         traffic: 0.8
     metrics:
       - accuracy

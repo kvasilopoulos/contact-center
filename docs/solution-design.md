@@ -1,217 +1,164 @@
 # Solution Design
 
-Production-ready FastAPI service that classifies customer messages into **informational**, **service_action**, and **safety_compliance** using OpenAI GPT-4o-mini, then routes through category-specific workflows. Designed for scalability, reliability, and healthcare compliance.
-
-**See also:** [System Architecture](architecture.md) for flow and components; [Evaluation & Testing](evaluation.md) for test strategy and results.
+This document explains *why* the system is built the way it is. For diagrams and component details, see [System Architecture](architecture). For test strategy, see [Evaluation & Testing](evaluation).
 
 ---
 
-## Table of Contents
+## Classification: A Single LLM Call
 
-1. [Evaluation Criteria Mapping](#evaluation-criteria-mapping)
-2. [System Architecture](#system-architecture)
-3. [Design Rationale](#design-rationale)
-4. [Assumptions & Tradeoffs](#assumptions--tradeoffs)
-5. [Testing](#testing)
-6. [Evaluation Results](#evaluation-results)
-7. [Monitoring](#monitoring)
-8. [CI/CD](#cicd)
-9. [Quick Reference](#quick-reference)
+The classifier uses a single call to OpenAI GPT-4.1 with structured JSON output validation. This is the most consequential design decision in the system and deserves explanation.
+
+**Why a single call instead of a multi-step chain?** A chain-of-thought pipeline (classify, then verify, then extract metadata) would improve reasoning on edge cases, but it multiplies latency and cost proportionally. In a contact center, response time directly affects customer experience. A single call with a well-engineered prompt achieves strong separation between categories while keeping latency in the hundreds of milliseconds rather than seconds. If a message is ambiguous, the confidence score signals uncertainty and the system escalates to a human rather than attempting to reason further.
+
+**Why structured output?** OpenAI's structured output mode (`responses.parse()`) guarantees that the response conforms to a Pydantic schema. This eliminates an entire class of runtime failures: malformed JSON, missing fields, invalid enum values. The LLM is constrained to return exactly `{category, confidence, reasoning}` with validated types and ranges. This is strictly preferable to parsing free-form text.
+
+**Why GPT-4.1?** GPT-4.1 offers strong instruction-following and structured output capabilities, making it well-suited for a classification task that maps messages to one of three categories. The system is model-agnostic: the model is a configuration variable, and the prompt registry supports A/B testing between models.
 
 ---
 
-## Evaluation Criteria Mapping
+## Rate Limiting: Protecting a Constrained Resource
 
-| Criteria | Implementation |
-|----------|-----------------|
-| **Scalability** | Stateless FastAPI, auto-scaling ECS (2–10 tasks), token-bucket rate limiting, async I/O |
-| **Code Reusability** | Workflow pattern, prompt templating, Pydantic models, pre-commit (Ruff, ty) |
-| **System Reliability** | Circuit breaker, retry with backoff, 80%+ test coverage, E2E and load tests |
-| **Compliance** | PII redaction in logs, input validation, audit logging, secrets management |
-| **Evaluation** | DeepEval LLM evals, GEval metric |
-| **Online Monitoring** | Confident AI telemetry, structured logging, health endpoints |
+The LLM API is the system's most constrained dependency. It has hard rate limits, per-token costs, and variable latency under load. When incoming request volume exceeds what the LLM can process, the system must decide: queue, reject, or degrade. This service chooses to reject excess traffic early and transparently.
+
+### Why Rate Limiting Is Necessary
+
+Without rate limiting, a traffic spike (whether organic or adversarial) would flood the LLM API with concurrent requests. This creates three compounding problems:
+
+1. **Upstream saturation.** The LLM provider throttles or drops requests, causing unpredictable failures deep in the pipeline.
+2. **Resource exhaustion.** Each pending LLM call holds an open connection and memory. Unbounded concurrency can exhaust connection pools and memory, degrading the entire service.
+3. **Cost amplification.** LLM calls are priced per token. An uncontrolled burst can generate significant costs before any human notices.
+
+Rate limiting addresses all three by capping throughput at a sustainable level. Clients that exceed the limit receive an immediate `429 Too Many Requests` with a `Retry-After` header, which is a clear, actionable signal that the system is under pressure.
+
+### Why Token Bucket
+
+The token bucket algorithm is chosen over simpler alternatives (fixed window, sliding window) because it naturally handles bursty traffic. A fixed window counter resets abruptly, allowing a burst at the boundary of two windows. A sliding window is more precise but requires storing per-request timestamps. The token bucket refills continuously and allows short bursts (up to 2x the sustained rate) while enforcing the average rate over time. This matches the real traffic pattern of a contact center, where messages tend to arrive in clusters.
+
+### Why In-Memory (and What Changes at Scale)
+
+The current implementation stores token buckets in a per-process dictionary. This is a deliberate MVP trade-off: it requires no external infrastructure, has zero latency overhead, and works correctly for a single-process deployment. In a multi-instance deployment, each instance enforces its own limit independently, so the aggregate rate could exceed the configured ceiling by a factor of the instance count. The documented migration path is to move the bucket state to Redis, which provides atomic operations and shared state across instances.
 
 ---
 
-## System Architecture
+## Circuit Breaker: Preventing Cascade Failure
 
-### High-Level Flow
+The circuit breaker is the system's most important resilience mechanism. It protects not just this service, but the downstream LLM provider, from the pathological behavior that occurs when a dependency fails and callers keep retrying.
+
+### The Failure Cascade Problem
+
+When the LLM API becomes unavailable (outage, rate limit, network partition), every incoming request blocks waiting for a timeout. During this period:
+
+- Connection pools fill up with stalled requests.
+- Response times spike from milliseconds to the timeout ceiling (typically 30 seconds).
+- Clients experience hangs rather than clear errors, and may retry, which doubles the load.
+- If the LLM is merely overloaded rather than down, the retry storm makes recovery harder.
+
+This is a classic cascade failure: the downstream problem propagates upstream and amplifies itself.
+
+### How the Circuit Breaker Solves It
+
+The circuit breaker tracks consecutive failures. After a configurable threshold of failures, it *opens* the circuit: subsequent requests are rejected immediately with a `503 Service Unavailable` and a `Retry-After` header, without ever calling the LLM. This has three benefits:
+
+1. **Fail fast.** Clients get a clear error in milliseconds instead of waiting for a timeout.
+2. **Relieve pressure.** The failing LLM API receives zero traffic during the open period, giving it time to recover.
+3. **Bounded impact.** Connection pools and memory are freed immediately instead of being held by stalled requests.
+
+After a recovery timeout, the circuit enters a *half-open* state and allows a small number of test requests through. If those succeed, the circuit closes and normal operation resumes. If they fail, the circuit reopens. This probing mechanism ensures the system recovers automatically without operator intervention.
+
+### State Machine
 
 ```
-Request → Validate → Rate Limit → Circuit Breaker → OpenAI API
-                                                       │
-Response ← Build Response ← Execute Workflow ← Parse ← LLM Result
-    │
-    ▼
-Telemetry (DeepEval/Confident AI)
+CLOSED ──(consecutive failures exceed threshold)──► OPEN
+   ▲                                                   │
+   │                                           (recovery timeout)
+   │                                                   ▼
+   └──────(test requests succeed)──────────── HALF-OPEN
+                                                   │
+                                           (any failure)
+                                                   │
+                                                   ▼
+                                                 OPEN
 ```
 
-**Steps:** Validate (max 5000 chars, channel); Rate limit (60 req/min, 2× burst); Circuit breaker (5 failures → OPEN, 30s recovery); OpenAI GPT-4o-mini with retry; Route to category workflow; Telemetry when `CONFIDENT_API_KEY` set.
+---
 
-### Component Summary
+## Workflow Pattern: Strategy Over Switch Statements
 
-| Component | Responsibility |
-|-----------|----------------|
-| API Layer | Request handling, validation (FastAPI + Pydantic) |
-| Rate Limiter | 60 req/min token bucket |
-| Circuit Breaker | 5 failures → open, 30s timeout |
-| Classifier | OpenAI GPT-4o-mini |
-| Prompt Registry | YAML + Jinja2 versioning |
-| Workflow Engine | Category-specific strategy pattern |
-| PII Redactor | Regex-based (`app/utils/pii_redaction.py`) |
+After classification, the message is dispatched to a workflow. Each workflow is a self-contained strategy that encapsulates the business logic for its category.
+
+### Why the Strategy Pattern
+
+A naive implementation would use a switch statement in the classification endpoint: `if category == "informational": do_faq_lookup(); elif ...`. This couples routing logic to business logic, makes testing harder (you must mock the entire endpoint to test a workflow), and means adding a new category requires modifying the router.
+
+The strategy pattern decouples these concerns. Each workflow is an independent class with a single `execute()` method. The dispatch layer is a dictionary lookup. Adding a new category means writing a new workflow class and registering it, nothing else changes.
+
+### Workflow Behaviors
+
+**Informational:** Searches a FAQ knowledge base using keyword matching. If confidence is low, it skips the FAQ search entirely and escalates to a human agent, because a wrong answer from a knowledge base is worse than admitting uncertainty.
+
+**Service Action:** Extracts the user's intent using pattern matching (cancel, refund, track, etc.) and prepares an action template for the downstream system. Each intent has a specific handler that returns the appropriate data structure (ticket template, tracking lookup, refund initiation). When no intent can be extracted, the message is routed to human support.
+
+**Safety Compliance:** The most complex workflow, reflecting the highest-stakes category. It assesses severity (urgent, high, standard) using keyword patterns and assigns SLAs accordingly. Every safety message generates an audit record with a unique compliance ID, timestamp, message hash, and FDA reporting flag. PII is redacted from the response before it leaves the system. Human review is always required regardless of confidence, because the cost of a missed safety event is asymmetrically high.
 
 ---
 
-## Design Rationale
+## Prompt Management: Version Control for LLM Behavior
 
-### Key Decisions
+Prompt engineering is iterative. A small change in wording can meaningfully shift classification behavior. The system treats prompts as versioned artifacts, not inline strings.
 
-| Decision | Rationale | Trade-off |
-|----------|-----------|-----------|
-| Single LLM call | Lower latency (<500ms p95), lower cost | Less complex reasoning |
-| Structured JSON output | Consistent responses, transparent decision_path | Depends on prompt engineering |
-| Workflow-based routing | Clear separation, extensible, testable | More structure vs inline logic |
-| Safety-first bias | Healthcare context | Higher false positive rate acceptable |
-| PII redaction | HIPAA-style compliance | Some processing overhead |
+Prompts are stored as YAML files with semantic versioning, Jinja2 templates for variable injection, and explicit metadata (description, changelog, parameters). A prompt registry manages active versions and supports A/B experiments that split traffic between prompt variants with configurable weights.
 
-### Scalability & Resilience
-
-- **Auto-scaling:** ECS Fargate 2–10 tasks (CPU ~70%, memory ~80%).
-- **Spike handling:** Token-bucket rate limit, circuit breaker on LLM errors, async I/O, connection pooling.
-- **Circuit breaker:** CLOSED → (5 failures) → OPEN → (30s) → HALF-OPEN → (3 successes) → CLOSED.
+This means a prompt change follows the same workflow as a code change: edit a YAML file, test it, review it in a PR, deploy it. The active version can be changed at runtime without redeploying the service.
 
 ---
 
-## Assumptions & Tradeoffs
+## PII Redaction: Defense in Depth
+
+Customer messages in a healthcare-adjacent context frequently contain sensitive information: email addresses, phone numbers, Social Security numbers, medical record numbers. The system applies regex-based PII detection and redaction at two points:
+
+1. **In safety compliance workflows** before building the response, so PII never leaves the system in API responses.
+2. **In structured logging** to ensure PII does not leak into log aggregation systems.
+
+This is defense in depth: even if a downstream consumer mishandles the response, the PII has already been stripped. The redactor detects common PII patterns (SSN, email, phone, credit card, date of birth, IP address, medical record number, passport, driver's license) and replaces them with typed placeholders like `[EMAIL_REDACTED]`.
+
+---
+
+## Confidence Thresholds and Human Escalation
+
+Not every classification is trustworthy. The system uses a configurable confidence threshold (default 0.5) below which a message is flagged for human review. This serves as a safety net: the LLM's uncertainty is made explicit and actionable rather than hidden.
+
+The threshold is intentionally conservative. A higher threshold would escalate more messages but increase human workload. A lower threshold would reduce escalation but risk acting on uncertain classifications. The default represents a balance point that errs toward caution, consistent with the safety-first design philosophy.
+
+For safety compliance specifically, human review is always required regardless of confidence, because the domain does not tolerate autonomous action on potentially life-critical messages.
+
+---
+
+## Assumptions and Technical Debt
 
 ### Assumptions
 
 | Assumption | Mitigation |
 |------------|------------|
-| OpenAI API available | Circuit breaker, graceful degradation |
-| Messages <5000 chars | Configurable validation |
-| Single category per message | Future: multi-label |
-| English only | Future: multi-lingual |
+| OpenAI API is generally available | Circuit breaker + graceful degradation |
+| Messages are under 5000 characters | Configurable validation limit |
+| One category per message | Future: multi-label classification |
+| English-language messages | Future: multi-lingual support |
 
-### Tradeoffs
+### Acknowledged Technical Debt
 
-| Choice | Alternative | Rationale |
-|--------|-------------|-----------|
-| Single LLM call | Multi-step reasoning | Latency, cost |
-| GPT-4o-mini | GPT-4 | Sufficient accuracy, lower cost |
-| In-memory rate limit | Redis | MVP scope |
-| Safety-first bias | Balanced | Healthcare compliance |
-
-### Technical Debt
-
-| Item | Current | Target |
-|------|---------|--------|
-| Rate limiting | In-memory | Redis-backed |
-| Response caching | None | Redis + TTL |
-| Persistence | In-memory | PostgreSQL |
+| Current State | Target State | Rationale for Deferral |
+|---------------|-------------|----------------------|
+| In-memory rate limiting | Redis-backed | Adequate for single-instance; Redis adds operational complexity |
+| No response caching | Redis with TTL | LLM calls are not idempotent by default; caching requires careful key design |
+| In-memory state | PostgreSQL persistence | Current scope does not require durable storage |
+| FAQ keyword matching | Vector similarity search | Sufficient for a bounded FAQ set; vector search adds an embedding dependency |
 
 ---
 
-## Testing
+## CI/CD and Quality Gates
 
-**Pyramid:** Unit (50+) → Integration (API contracts) → E2E (full flow) → DeepEval (LLM quality). Target 80%+ coverage.
+**Continuous Integration** runs on every push and pull request: Ruff (lint + format), ty (type checking), Bandit (security scanning), pytest (unit, integration, E2E), and DeepEval (LLM output quality). The Docker image is built and validated as part of the pipeline.
 
-| Category | Location | Purpose |
-|----------|----------|---------|
-| Unit | `tests/unit/` | Component isolation |
-| Integration | `tests/integration/` | API contracts |
-| E2E | `tests/e2e/` | Full flow |
-| DeepEval | `tests/deepeval/` | LLM quality |
-| Load | `tests/load/` | Locust scenarios |
+**Continuous Deployment** is triggered by version tags. The pipeline pushes the container image to GitHub Container Registry, applies Terraform to the target environment, and runs smoke tests against the deployed service.
 
-**Quality gates:** Coverage ≥80%, 100% pass, Ruff + ty + Bandit in CI and pre-commit.
-
-```bash
-make test          # All tests
-make test-cov      # With coverage
-deepeval test run tests/deepeval/
-locust -f tests/load/locustfile.py --host http://localhost:8000
-```
-
----
-
-## Evaluation Results
-
-### Classification Accuracy (sample)
-
-| Category | Cases | Accuracy | Avg Confidence |
-|----------|-------|----------|----------------|
-| Informational | 5 | 100% | 0.94 |
-| Service Action | 5 | 100% | 0.91 |
-| Safety Compliance | 5 | 100% | 0.96 |
-| **Total** | **15** | **100%** | **0.94** |
-
-### Latency
-
-| Percentile | Latency |
-|------------|---------|
-| P50 | 220ms |
-| P95 | 380ms |
-| P99 | 520ms |
-
-### PII Redaction (Compliance)
-
-| PII Type | Redacted As |
-|----------|-------------|
-| SSN, Email, Phone | `[SSN_REDACTED]`, `[EMAIL_REDACTED]`, etc. |
-| Credit Card, Medical Record, IP | `[CREDIT_CARD_REDACTED]`, etc. |
-
----
-
-## Monitoring
-
-- **DeepEval/Confident AI:** When `CONFIDENT_API_KEY` is set, classifications are traced (input, channel, category, confidence, latency, model, prompt version).
-- **Structured logging:** JSON with `request_id`, PII-redacted previews, processing time, category, confidence.
-- **Health:** `GET /api/v1/health` (liveness), `GET /api/v1/ready` (readiness).
-
----
-
-## CI/CD
-
-**CI (on push/PR):** Lint (Ruff), type-check (ty), security (Bandit), test (pytest 80%+), DeepEval (reports), Docker build.
-
-**CD:** Staging on push to `main` (GHCR + Terraform + smoke); Production on version tag `v*` (GHCR + Terraform + smoke).
-
-**Pre-commit:** uv-lock, ruff, ruff-format, ty, bandit, trailing-whitespace, check-yaml, detect-private-key, no-commit-to-branch.
-
----
-
-## Quick Reference
-
-### Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OPENAI_API_KEY` | Yes | - | OpenAI API key |
-| `OPENAI_MODEL` | No | `gpt-4o-mini` | Model |
-| `ENVIRONMENT` | No | `development` | Environment |
-| `LOG_LEVEL` | No | `INFO` | Logging level |
-| `MIN_CONFIDENCE_THRESHOLD` | No | `0.5` | Human review threshold |
-| `RATE_LIMIT_REQUESTS_PER_MINUTE` | No | `60` | Rate limit |
-| `CONFIDENT_API_KEY` | No | - | Telemetry key |
-
-### API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/classify` | Classify text |
-| `POST` | `/api/v1/classify/voice` | Classify audio |
-| `GET` | `/api/v1/health` | Liveness |
-| `GET` | `/api/v1/ready` | Readiness |
-| `GET` | `/docs` | Swagger UI |
-| `GET` | `/redoc` | ReDoc |
-
-### Commands
-
-```bash
-make run              # Start server
-make test / test-cov  # Tests
-make lint / format / type-check / check
-docker-compose up     # Local Docker
-terraform apply       # AWS
-```
+**Pre-commit hooks** enforce the same quality gates locally: uv-lock consistency, Ruff, ty, Bandit, trailing whitespace, YAML validation, and private key detection. This ensures that most issues are caught before code reaches the CI pipeline.
