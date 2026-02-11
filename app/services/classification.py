@@ -7,12 +7,7 @@ import time
 from app.core import Settings
 from app.schemas import CategoryType
 from app.schemas.llm_responses import ClassificationLLMResponse
-from app.services.llm import (
-    LLMClient,
-    LLMClientError,
-    LLMParseError,
-    LLMRefusalError,
-)
+from app.services.llm import LLMClient, LLMClientError, LLMParseError, LLMRefusalError
 from app.utils.pii_redaction import redact_pii
 
 logger = logging.getLogger(__name__)

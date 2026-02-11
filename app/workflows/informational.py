@@ -64,7 +64,10 @@ class InformationalWorkflow(BaseWorkflow):
         return "informational"
 
     async def execute(
-        self, message: str, confidence: float, metadata: dict[str, Any]  # noqa: ARG002
+        self,
+        message: str,
+        confidence: float,
+        metadata: dict[str, Any],  # noqa: ARG002
     ) -> WorkflowResult:
         logger.info(
             "Executing informational workflow",

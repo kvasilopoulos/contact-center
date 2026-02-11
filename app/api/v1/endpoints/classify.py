@@ -1,15 +1,18 @@
 """Classification endpoint."""
 
-import json
 import logging
 import os
-from typing import Any
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 from app.core import Settings, get_settings, record_classification
-from app.schemas import ClassificationRequest, ClassificationResponse, NextStepInfo
+from app.schemas import (
+    ClassificationRequest,
+    ClassificationResponse,
+    NextStepInfo,
+    VoiceClassificationRequest,
+)
 from app.services.classification import ClassificationError, Classifier
 from app.services.dispatch import execute_workflow
 
@@ -171,10 +174,7 @@ async def classify_voice_message(
         ...,
         description="Audio file containing the customer's voice message (WAV recommended).",
     ),
-    metadata: str | None = File(
-        default=None,
-        description="Optional JSON-encoded metadata about the message context.",
-    ),
+    payload: VoiceClassificationRequest = Depends(),
     classifier: Classifier = Depends(get_classifier),
 ) -> ClassificationResponse:
     """Classify a customer voice message by sending audio to the Realtime model."""
@@ -188,25 +188,6 @@ async def classify_voice_message(
             "content_type": audio_file.content_type,
         },
     )
-
-    # Parse optional metadata JSON
-    metadata_dict: dict[str, Any] = {}
-    if metadata:
-        try:
-            metadata_dict = json.loads(metadata)
-        except json.JSONDecodeError as e:
-            logger.warning(
-                "Invalid metadata JSON for voice classification",
-                extra={"request_id": request_id, "error": str(e)},
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "error": "invalid_metadata",
-                    "message": "Metadata must be valid JSON.",
-                    "request_id": request_id,
-                },
-            ) from e
 
     try:
         # Read audio bytes
@@ -232,7 +213,7 @@ async def classify_voice_message(
             category=result.category,
             message="voice_message",  # We do not expose transcription; message is placeholder
             confidence=result.confidence,
-            metadata=metadata_dict,
+            metadata=payload.metadata,
         )
 
         # Build the response

@@ -27,6 +27,29 @@ class ClassificationRequest(BaseModel):
         description="Optional metadata about the message context",
     )
 
+
+class VoiceClassificationRequest(BaseModel):
+    """Request model for voice message classification metadata."""
+
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional metadata about the voice message context",
+    )
+
+    model_config = ConfigDict(
+        title="Voice classification request (metadata only)",
+        json_schema_extra={
+            "examples": [
+                {
+                    "metadata": {
+                        "customer_id": "C123",
+                        "call_id": "CALL-789",
+                    }
+                }
+            ]
+        },
+    )
+
     model_config = ConfigDict(
         title="Classification request (message + channel)",
         json_schema_extra={

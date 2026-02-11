@@ -7,10 +7,10 @@ import sys
 
 from app.core import DevFormatter, JsonFormatter, configure_logging
 
-
 # ---------------------------------------------------------------------------
 # JsonFormatter
 # ---------------------------------------------------------------------------
+
 
 def test_json_formatter_outputs_valid_json_one_object_per_line() -> None:
     """Each formatted record is a single line of valid JSON."""
@@ -84,6 +84,7 @@ def test_json_formatter_excludes_color_message() -> None:
 # DevFormatter
 # ---------------------------------------------------------------------------
 
+
 def test_dev_formatter_outputs_human_readable_line() -> None:
     """DevFormatter produces a pipe-delimited, human-readable line."""
     formatter = DevFormatter()
@@ -150,6 +151,7 @@ def test_dev_formatter_no_extras_no_trailing_whitespace() -> None:
 # ---------------------------------------------------------------------------
 # configure_logging (environment switching)
 # ---------------------------------------------------------------------------
+
 
 def test_configure_logging_uses_json_by_default() -> None:
     """Default (production) environment uses JsonFormatter."""

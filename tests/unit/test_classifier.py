@@ -121,9 +121,7 @@ class TestClassifier:
         mock_llm_client: MagicMock,
     ) -> None:
         """Test that parse error defaults to service_action with low confidence."""
-        mock_llm_client.classify_text.side_effect = LLMParseError(
-            "Failed to parse LLM response"
-        )
+        mock_llm_client.classify_text.side_effect = LLMParseError("Failed to parse LLM response")
 
         result = await classifier.classify("Test message")
 

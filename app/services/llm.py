@@ -9,9 +9,8 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from pydantic import BaseModel
-
 from openai import AsyncOpenAI, OpenAIError
+from pydantic import BaseModel
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 import websockets
 from websockets.asyncio.client import ClientConnection
@@ -21,11 +20,7 @@ if TYPE_CHECKING:
     from app.core import Settings
 from app.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from app.prompts import registry
-from app.utils.audio import (
-    AudioFormatError,
-    convert_wav_to_pcm16_24khz,
-    detect_audio_format,
-)
+from app.utils.audio import AudioFormatError, convert_wav_to_pcm16_24khz, detect_audio_format
 
 logger = logging.getLogger(__name__)
 
