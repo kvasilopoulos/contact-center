@@ -149,18 +149,30 @@ class LLMClient:
                 store=False,
             )
 
-            # Check for refusal in output content
-            for output_item in response.output:
-                if output_item.type == "message":
-                    for content in output_item.content:
-                        if content.type == "refusal":
+            # Check for refusal in output content.
+            # The Responses API can return `output` as a list of different
+            # structures or `None`, so we defensively handle all cases to
+            # satisfy static type checking.
+            output_items = response.output
+            if output_items:
+                for output_item in output_items:
+                    if getattr(output_item, "type", None) != "message":
+                        continue
+
+                    contents = getattr(output_item, "content", None)
+                    if not contents:
+                        continue
+
+                    for content in contents:
+                        if getattr(content, "type", None) == "refusal":
+                            refusal = getattr(content, "refusal", "unknown")
                             logger.warning(
                                 "LLM refused to respond",
-                                extra={"refusal": content.refusal, "model": model},
+                                extra={"refusal": refusal, "model": model},
                             )
                             raise LLMRefusalError(
                                 "LLM refused to generate response",
-                                refusal=content.refusal,
+                                refusal=refusal,
                             )
 
             # Get parsed response
