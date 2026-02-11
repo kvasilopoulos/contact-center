@@ -26,9 +26,12 @@ sections:
 
   - title: "Deployment"
     pages:
-      - title: "AWS"
+      - title: "AWS Architecture"
         path: "aws"
-        description: "Deploy to ECS with Terraform (quick start and reference)"
+        description: "Infrastructure overview, scaling, CI/CD, and monitoring"
+      - title: "Deploy to AWS"
+        path: "aws-deploy"
+        description: "Step-by-step Terraform deployment guide"
 
   - title: "Frontend"
     pages:
