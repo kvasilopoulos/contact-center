@@ -1,35 +1,38 @@
 # Documentation Sidebar Configuration
-# Categories: Overview → Solution Design → Architecture → Evaluation → AWS → Frontend
+# Presentation order: Overview → Architecture → Design Decisions → Evaluation → AWS → Frontend
 # Use lowercase with hyphens for URLs
 
 sections:
   - title: "Overview"
     pages:
-      - title: "Overview"
+      - title: "01. Overview"
         path: "overview"
-        description: "What the app does, quick start, and links"
+        description: "Problem, solution, and presentation outline"
 
-  - title: "Solution & Architecture"
+  - title: "Architecture & Design"
     pages:
-      - title: "Solution Design"
-        path: "solution-design"
-        description: "Design decisions, compliance, and trade-offs"
-      - title: "System Architecture"
+      - title: "02. Architecture"
         path: "architecture"
-        description: "Components, workflows, API, and code map"
+        description: "Pipeline diagrams, workflows, and circuit breaker"
+      - title: "03. Design Decisions"
+        path: "design-decisions"
+        description: "Why each pattern was chosen and trade-offs accepted"
+      - title: "API Reference"
+        path: "api-reference"
+        description: "Endpoints, middleware, bootstrap, and code map"
 
   - title: "Evaluation & Testing"
     pages:
-      - title: "Evaluation & Testing"
+      - title: "04. Evaluation & Testing"
         path: "evaluation"
         description: "Test strategy, sample results, and quality gates"
 
   - title: "Deployment"
     pages:
-      - title: "AWS Architecture"
+      - title: "05. AWS Architecture"
         path: "aws"
         description: "Infrastructure overview, scaling, CI/CD, and monitoring"
-      - title: "Deploy to AWS"
+      - title: "06. Deploy to AWS"
         path: "aws-deploy"
         description: "Step-by-step Terraform deployment guide"
 

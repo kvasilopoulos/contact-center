@@ -1,6 +1,6 @@
 # Evaluation & Testing
 
-Test strategy, quality philosophy, and the feedback loop for continuous improvement. For architecture details, see [System Architecture](architecture). For design rationale, see [Solution Design](solution-design).
+Test strategy, quality philosophy, and the feedback loop for continuous improvement. For architecture details, see [Architecture](architecture). For design rationale, see [Design Decisions](design-decisions).
 
 ---
 

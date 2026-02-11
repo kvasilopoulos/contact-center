@@ -1,10 +1,10 @@
 # Contact Center AI Orchestrator
 
-## The Problem
+##  The Problem
 
 A contact center handles customer messages across different domains: FAQs, service requests, and safety reports. Each category needs a fundamentally different response path. Manual routing is slow, inconsistent, and does not scale.
 
-## The Solution — One LLM Call, Three Workflows
+##  The Solution — One LLM Call, Three Workflows
 
 FastAPI service: message in → GPT-4.1 classification → workflow dispatch → structured response.
 
@@ -14,7 +14,7 @@ Three categories:
 - **Service Action** → intent extraction + action template (cancel, refund, track)
 - **Safety Compliance** → severity assessment, audit record, PII redaction, mandatory human escalation
 
-## Key Design Decisions
+##  Key Design Decisions
 
 - **Single LLM call** — latency in hundreds of ms, not seconds; structured output via Pydantic eliminates parsing failures
 - **Classification separated from action** — swap models or add workflows independently

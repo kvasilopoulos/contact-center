@@ -1,6 +1,6 @@
-# Solution Design
+# Design Decisions
 
-This document explains *why* the system is built the way it is. For diagrams and component details, see [System Architecture](architecture). For test strategy, see [Evaluation & Testing](evaluation).
+This document explains *why* the system is built the way it is. For diagrams and component details, see [Architecture](architecture). For test strategy, see [Evaluation & Testing](evaluation).
 
 ---
 
@@ -65,35 +65,13 @@ The circuit breaker tracks consecutive failures. After a configurable threshold 
 
 After a recovery timeout, the circuit enters a *half-open* state and allows a small number of test requests through. If those succeed, the circuit closes and normal operation resumes. If they fail, the circuit reopens. This probing mechanism ensures the system recovers automatically without operator intervention.
 
-### State Machine
-
-```mermaid
-stateDiagram-v2
-    CLOSED --> OPEN: consecutive failures exceed threshold
-    OPEN --> HALF_OPEN: recovery timeout
-    HALF_OPEN --> CLOSED: test requests succeed
-    HALF_OPEN --> OPEN: any failure
-```
-
 ---
 
 ## Workflow Pattern: Strategy Over Switch Statements
 
-After classification, the message is dispatched to a workflow. Each workflow is a self-contained strategy that encapsulates the business logic for its category.
-
-### Why the Strategy Pattern
-
 A naive implementation would use a switch statement in the classification endpoint: `if category == "informational": do_faq_lookup(); elif ...`. This couples routing logic to business logic, makes testing harder (you must mock the entire endpoint to test a workflow), and means adding a new category requires modifying the router.
 
 The strategy pattern decouples these concerns. Each workflow is an independent class with a single `execute()` method. The dispatch layer is a dictionary lookup. Adding a new category means writing a new workflow class and registering it, nothing else changes.
-
-### Workflow Behaviors
-
-**Informational:** Searches a FAQ knowledge base using keyword matching. If confidence is low, it skips the FAQ search entirely and escalates to a human agent, because a wrong answer from a knowledge base is worse than admitting uncertainty.
-
-**Service Action:** Extracts the user's intent using pattern matching (cancel, refund, track, etc.) and prepares an action template for the downstream system. Each intent has a specific handler that returns the appropriate data structure (ticket template, tracking lookup, refund initiation). When no intent can be extracted, the message is routed to human support.
-
-**Safety Compliance:** The most complex workflow, reflecting the highest-stakes category. It assesses severity (urgent, high, standard) using keyword patterns and assigns SLAs accordingly. Every safety message generates an audit record with a unique compliance ID, timestamp, message hash, and FDA reporting flag. PII is redacted from the response before it leaves the system. Human review is always required regardless of confidence, because the cost of a missed safety event is asymmetrically high.
 
 ---
 
@@ -157,3 +135,4 @@ For safety compliance specifically, human review is always required regardless o
 **Continuous Deployment** is triggered by version tags. The pipeline pushes the container image to GitHub Container Registry, applies Terraform to the target environment, and runs smoke tests against the deployed service.
 
 **Pre-commit hooks** enforce the same quality gates locally: uv-lock consistency, Ruff, ty, Bandit, trailing whitespace, YAML validation, and private key detection. This ensures that most issues are caught before code reaches the CI pipeline.
+

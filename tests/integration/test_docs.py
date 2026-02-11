@@ -6,12 +6,12 @@ from fastapi.testclient import TestClient
 class TestDocumentationEndpoints:
     """Tests for documentation rendering endpoints.
 
-    Docs are mounted at prefix /docs (e.g. /docs/solution-design, /docs/architecture).
+    Docs are mounted at prefix /docs (e.g. /docs/design-decisions, /docs/architecture).
     """
 
     def test_docs_home_page(self, client: TestClient) -> None:
         """Test a documentation page loads with docs template."""
-        response = client.get("/docs/solution-design")
+        response = client.get("/docs/design-decisions")
 
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
@@ -19,7 +19,7 @@ class TestDocumentationEndpoints:
 
     def test_docs_has_sidebar(self, client: TestClient) -> None:
         """Test that documentation pages include sidebar navigation."""
-        response = client.get("/docs/solution-design")
+        response = client.get("/docs/design-decisions")
 
         assert response.status_code == 200
         assert b"sidebar" in response.content.lower()

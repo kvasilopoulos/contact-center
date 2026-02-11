@@ -51,10 +51,11 @@ curl -X POST http://localhost:8000/api/v1/classify \
 | Document | What It Covers |
 |----------|---------------|
 | [Overview](docs/overview.md) | End-to-end project narrative: problem, solution, and design philosophy |
-| [Solution Design](docs/solution-design.md) | Architecture rationale: why each pattern was chosen and what trade-offs were accepted |
-| [System Architecture](docs/architecture.md) | Component diagrams, request flow, workflow behavior, and API surface |
+| [Architecture](docs/architecture.md) | Pipeline diagrams, request flow, workflows, and API surface |
+| [Design Decisions](docs/design-decisions.md) | Why each pattern was chosen and what trade-offs were accepted |
 | [Evaluation & Testing](docs/evaluation.md) | Test strategy, quality gates, and the feedback loop for continuous improvement |
-| [AWS Deployment](docs/aws.md) | ECS Fargate deployment with Terraform |
+| [AWS Architecture](docs/aws.md) | Infrastructure overview, scaling, CI/CD, and monitoring |
+| [Deploy to AWS](docs/aws-deploy.md) | Step-by-step Terraform deployment guide |
 | [Frontend](docs/frontend.md) | Documentation UI rendering system |
 
 ---
