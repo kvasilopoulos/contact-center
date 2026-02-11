@@ -67,17 +67,12 @@ After a recovery timeout, the circuit enters a *half-open* state and allows a sm
 
 ### State Machine
 
-```
-CLOSED ──(consecutive failures exceed threshold)──► OPEN
-   ▲                                                   │
-   │                                           (recovery timeout)
-   │                                                   ▼
-   └──────(test requests succeed)──────────── HALF-OPEN
-                                                   │
-                                           (any failure)
-                                                   │
-                                                   ▼
-                                                 OPEN
+```mermaid
+stateDiagram-v2
+    CLOSED --> OPEN: consecutive failures exceed threshold
+    OPEN --> HALF_OPEN: recovery timeout
+    HALF_OPEN --> CLOSED: test requests succeed
+    HALF_OPEN --> OPEN: any failure
 ```
 
 ---

@@ -24,7 +24,9 @@ graph LR
 
     subgraph Workflows["Workflows"]
         direction TB
-        Info[Informational] ~~~ Svc[Service Action] ~~~ Safety[Safety Compliance]
+        Info[Informational]
+        Svc[Service Action]
+        Safety[Safety Compliance]
     end
 
     subgraph External["External Systems"]
@@ -34,7 +36,10 @@ graph LR
         Compliance[Compliance / Escalation]
     end
 
-    Clients --> Middleware --> Classifier --> Workflows
+    Clients --> Middleware --> Classifier
+    Classifier -.-> Info
+    Classifier -.-> Svc
+    Classifier -.-> Safety
     Info --> KB
     Svc --> Ticketing
     Safety --> Compliance
