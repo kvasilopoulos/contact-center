@@ -95,7 +95,7 @@ class DevFormatter(logging.Formatter):
 
         if record.exc_info:
             exc_text = self.formatException(record.exc_info)
-            indented = "\n".join(f"  {l}" for l in exc_text.splitlines())
+            indented = "\n".join(f"  {line_text}" for line_text in exc_text.splitlines())
             line = f"{line}\n{indented}"
 
         return line
