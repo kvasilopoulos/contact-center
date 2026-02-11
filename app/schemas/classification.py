@@ -23,7 +23,7 @@ class ClassificationRequest(BaseModel):
         description="The communication channel the message originated from",
     )
     metadata: dict[str, Any] = Field(
-        default_factory=dict,
+        default={},
         description="Optional metadata about the message context",
     )
 
@@ -32,7 +32,7 @@ class VoiceClassificationRequest(BaseModel):
     """Request model for voice message classification metadata."""
 
     metadata: dict[str, Any] = Field(
-        default_factory=dict,
+        default={},
         description="Optional metadata about the voice message context",
     )
 

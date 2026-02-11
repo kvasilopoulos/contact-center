@@ -8,6 +8,7 @@ import time
 import uuid
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -142,12 +143,14 @@ def create_app() -> FastAPI:
         request_id = getattr(request.state, "request_id", None)
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content=ErrorResponse(
-                error="validation_error",
-                message="Request validation failed",
-                request_id=request_id,
-                details={"errors": exc.errors()},
-            ).model_dump(),
+            content=jsonable_encoder(
+                ErrorResponse(
+                    error="validation_error",
+                    message="Request validation failed",
+                    request_id=request_id,
+                    details={"errors": exc.errors()},
+                ).model_dump()
+            ),
         )
 
     @app.exception_handler(Exception)
