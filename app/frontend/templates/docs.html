@@ -275,10 +275,14 @@
         }
 
         /* Mermaid diagrams */
+        .mermaid-wrapper {
+            position: relative;
+            margin: 2rem 0;
+        }
+
         .mermaid {
             display: flex;
             justify-content: center;
-            margin: 2rem 0;
             padding: 1.5rem;
             background: hsl(var(--muted) / 0.3);
             border-radius: var(--radius);
@@ -288,6 +292,94 @@
         .mermaid svg {
             max-width: 100%;
             height: auto;
+        }
+
+        .mermaid-zoom-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: hsl(var(--background));
+            border: 1px solid hsl(var(--border));
+            border-radius: calc(var(--radius) - 2px);
+            cursor: pointer;
+            color: hsl(var(--muted-foreground));
+            transition: all 150ms ease;
+            z-index: 1;
+            opacity: 0;
+        }
+
+        .mermaid-wrapper:hover .mermaid-zoom-btn {
+            opacity: 1;
+        }
+
+        .mermaid-zoom-btn:hover {
+            background: hsl(var(--muted));
+            color: hsl(var(--foreground));
+        }
+
+        .mermaid-zoom-btn svg {
+            width: 16px;
+            height: 16px;
+            pointer-events: none;
+        }
+
+        /* Modal overlay */
+        .mermaid-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: hsl(var(--background));
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mermaid-modal.open {
+            display: flex;
+        }
+
+        .mermaid-modal-content {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+        }
+
+        .mermaid-modal-content svg {
+            max-width: 100%;
+            max-height: 90vh;
+            display: block;
+        }
+
+        .mermaid-modal-close {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 10000;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: hsl(var(--background));
+            border: 1px solid hsl(var(--border));
+            border-radius: calc(var(--radius) - 2px);
+            cursor: pointer;
+            color: hsl(var(--muted-foreground));
+            transition: all 150ms ease;
+        }
+
+        .mermaid-modal-close:hover {
+            background: hsl(var(--muted));
+            color: hsl(var(--foreground));
         }
 
         /* Horizontal chart row: better real estate for multiple diagrams */
@@ -513,6 +605,14 @@
         </div>
     </div>
 
+    <!-- Mermaid zoom modal -->
+    <div class="mermaid-modal" id="mermaidModal">
+        <button class="mermaid-modal-close" id="mermaidModalClose" title="Close">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div class="mermaid-modal-content" id="mermaidModalContent"></div>
+    </div>
+
     <script>
         // Function to convert code blocks to mermaid diagrams and render them
         window.convertMermaidBlocks = function() {
@@ -563,7 +663,9 @@
                 const allMermaidDivs = document.querySelectorAll('div.mermaid');
                 if (allMermaidDivs.length > 0) {
                     try {
-                        window.mermaidInstance.run();
+                        window.mermaidInstance.run().then(function() {
+                            addMermaidZoomButtons();
+                        });
                     } catch (error) {
                         console.error('Mermaid rendering error:', error);
                         // Show error in the diagram div
@@ -619,6 +721,56 @@
         }
         
         initMermaid();
+
+        // Zoom button logic for mermaid diagrams
+        function addMermaidZoomButtons() {
+            document.querySelectorAll('div.mermaid').forEach(function(div) {
+                if (div.closest('.mermaid-wrapper')) return; // already wrapped
+                var svg = div.querySelector('svg');
+                if (!svg) return;
+
+                var wrapper = document.createElement('div');
+                wrapper.className = 'mermaid-wrapper';
+                div.parentNode.insertBefore(wrapper, div);
+                wrapper.appendChild(div);
+
+                var btn = document.createElement('button');
+                btn.className = 'mermaid-zoom-btn';
+                btn.title = 'Expand diagram';
+                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+                btn.addEventListener('click', function() {
+                    openMermaidModal(svg);
+                });
+                wrapper.appendChild(btn);
+            });
+        }
+
+        function openMermaidModal(svgEl) {
+            var modal = document.getElementById('mermaidModal');
+            var content = document.getElementById('mermaidModalContent');
+            content.innerHTML = '';
+            var clone = svgEl.cloneNode(true);
+            clone.removeAttribute('style');
+            clone.style.maxWidth = '100%';
+            clone.style.height = 'auto';
+            content.appendChild(clone);
+            modal.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMermaidModal() {
+            var modal = document.getElementById('mermaidModal');
+            modal.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
+        document.getElementById('mermaidModalClose').addEventListener('click', closeMermaidModal);
+        document.getElementById('mermaidModal').addEventListener('click', function(e) {
+            if (e.target === this) closeMermaidModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeMermaidModal();
+        });
 
         // Smooth scroll for TOC links
         document.querySelectorAll('.toc-link').forEach(link => {
